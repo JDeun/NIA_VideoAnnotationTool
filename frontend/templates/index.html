@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>비디오 라벨링 플랫폼</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 메인 콘텐츠 영역 -->
+        <div class="main-content">
+            <!-- 파일 입력 영역 -->
+            <div class="file-input-container">
+                <div class="input-group">
+                    <input type="text" id="pathInput" placeholder="경로 입력">
+                    <button id="loadPath" class="btn">경로 로드</button>
+                </div>
+                <div class="input-group">
+                    <input type="file" id="directoryInput" webkitdirectory directory multiple style="display:none">
+                    <button id="loadFiles" class="btn">폴더 로드</button>
+                    <input type="file" id="fileInput" accept="video/mp4" multiple style="display:none">
+                    <button id="loadSingleFiles" class="btn">파일 로드</button>
+                </div>
+                <div id="progressContainer" class="progress-container">
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- 비디오 플레이어 -->
+            <div class="video-container">
+                <video id="videoPlayer" controls></video>
+            </div>
+
+            <!-- 컨트롤 버튼 -->
+            <div class="controls">
+                <button id="prevFrame" class="btn control-btn">◀◀ 이전 프레임</button>
+                <button id="prevSecond" class="btn control-btn">◀ 이전 초</button>
+                <button id="playPause" class="btn control-btn">재생/일시정지</button>
+                <button id="nextSecond" class="btn control-btn">다음 초 ▶</button>
+                <button id="nextFrame" class="btn control-btn">다음 프레임 ▶▶</button>
+                <button id="markPoint" class="btn control-btn highlight-btn">구간 표시</button>
+                <div class="time-display">
+                    프레임: <span id="frameCount">0</span> | 시간: <span id="timeCount">0.00</span>s
+                </div>
+            </div>
+
+            <!-- 타임라인 -->
+            <div class="timeline-container">
+                <div id="timeline" class="timeline">
+                    <div id="timelineMarker" class="timeline-marker"></div>
+                </div>
+            </div>
+            
+            <button id="completeButton" class="btn complete-btn">작성 완료</button>
+        </div>
+
+        <!-- 파일 목록 -->
+        <div class="file-list-container">
+            <h3>파일 목록</h3>
+            <div class="file-list-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>파일명</th>
+                            <th>상태</th>
+                            <th>작업</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileList"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 모달 -->
+        <div id="segmentModal" class="modal">
+            <div class="modal-content">
+                <h3>구간 정보 입력</h3>
+                <div class="action-type-buttons">
+                    <button class="btn action-type-btn" data-action="observe">Observe</button>
+                    <button class="btn action-type-btn" data-action="approach">Approach</button>
+                    <button class="btn action-type-btn" data-action="use">Use</button>
+                    <button class="btn action-type-btn" data-action="complete">Complete</button>
+                </div>
+                <div class="modal-input">
+                    <label for="captionInput">캡션:</label>
+                    <textarea id="captionInput" placeholder="구간에 대한 설명을 입력하세요"></textarea>
+                </div>
+                <div class="modal-buttons">
+                    <button id="saveSegment" class="btn highlight-btn">저장</button>
+                    <button id="cancelSegment" class="btn">취소</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/video-controller.js"></script>
+    <script src="/static/js/timeline.js"></script>
+    <script src="/static/js/file-handler.js"></script>
+</body>
+</html>
