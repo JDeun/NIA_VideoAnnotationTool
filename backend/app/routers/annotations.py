@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import os
 from urllib.parse import unquote
+import shutil  # 파일 백업용
 
 router = APIRouter(prefix="/api", tags=["annotations"])
 
@@ -13,9 +14,7 @@ annotations_data = {}
 
 @router.post("/annotations/{video_name}")
 async def save_annotations(video_name: str, data: Dict = Body(...)):
-   """
-   비디오 어노테이션 임시 저장
-   """
+   """임시 어노테이션 저장"""
    try:
        annotations_data[video_name] = data
        return JSONResponse(
@@ -27,9 +26,7 @@ async def save_annotations(video_name: str, data: Dict = Body(...)):
 
 @router.get("/annotations/{video_name}")
 async def get_annotations(video_name: str):
-   """
-   비디오 어노테이션 조회
-   """
+   """어노테이션 조회"""
    try:
        # 메모리에서 먼저 확인
        if video_name in annotations_data:
@@ -57,15 +54,19 @@ async def get_annotations(video_name: str):
        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/complete/{video_name}")
-async def complete_annotations(video_name: str):
-   """
-   어노테이션 최종 저장 및 JSON 파일 생성
-   """
+async def complete_annotations(video_name: str, is_modify: bool = False):
+   """최종 저장 (신규 생성 또는 수정)"""
    try:
        if video_name not in annotations_data:
            raise HTTPException(status_code=404, detail="Annotations not found")
            
        output_path = Path(unquote(video_name)).with_suffix('.json')
+       
+       # 수정 모드일 경우 기존 파일 백업
+       if is_modify and output_path.exists():
+           backup_path = output_path.with_suffix('.json.bak')
+           shutil.copy2(output_path, backup_path)
+       
        output_path.parent.mkdir(parents=True, exist_ok=True)
        
        with open(output_path, 'w', encoding='utf-8') as f:
@@ -77,6 +78,7 @@ async def complete_annotations(video_name: str):
        return JSONResponse(
            content={
                "status": "success",
+               "message": "수정 완료" if is_modify else "저장 완료",
                "file": str(output_path)
            },
            status_code=200
@@ -86,9 +88,7 @@ async def complete_annotations(video_name: str):
 
 @router.get("/check-annotation")
 async def check_annotation(path: str):
-   """
-   어노테이션 파일 존재 여부 확인
-   """
+   """어노테이션 파일 존재 여부 확인"""
    try:
        video_path = unquote(path)
        json_path = Path(video_path).with_suffix('.json')
@@ -105,9 +105,7 @@ async def check_annotation(path: str):
 
 @router.post("/save-annotation")
 async def save_annotation(file: UploadFile = File(...), path: str = Form(...)):
-   """
-   어노테이션 저장
-   """
+   """어노테이션 저장"""
    try:
        if path.startswith('blob:'):
            raise HTTPException(status_code=400, detail="Invalid file path")
@@ -137,24 +135,57 @@ async def save_annotation(file: UploadFile = File(...), path: str = Form(...)):
    except Exception as e:
        raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/annotations/{video_name}")
-async def delete_annotations(video_name: str):
-   """
-   어노테이션 삭제
-   """
+@router.delete("/delete-annotation/{video_name}")
+async def delete_annotation(video_name: str):
+   """어노테이션 삭제"""
    try:
+       # 메모리에서 삭제
        if video_name in annotations_data:
            del annotations_data[video_name]
 
+       # 파일 삭제
        video_path = unquote(video_name)
        json_path = Path(video_path).with_suffix('.json')
        
        if json_path.exists():
            json_path.unlink()
-           
+
        return JSONResponse(
            content={"status": "success"},
            status_code=200
        )
+   except Exception as e:
+       raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/modify-segment/{video_name}")
+async def modify_segment(
+   video_name: str, 
+   segment_index: int = Body(...),
+   modified_data: Dict = Body(...)
+):
+   """개별 세그먼트 수정"""
+   try:
+       if video_name not in annotations_data:
+           # 파일에서 데이터 로드
+           video_path = unquote(video_name)
+           json_path = Path(video_path).with_suffix('.json')
+           
+           if json_path.exists():
+               with open(json_path, 'r', encoding='utf-8') as f:
+                   annotations_data[video_name] = json.load(f)
+           else:
+               raise HTTPException(status_code=404, detail="Annotations not found")
+       
+       # 세그먼트 수정
+       segments = annotations_data[video_name]["annotations"]["temporal_action_localization"]
+       if 0 <= segment_index < len(segments):
+           segments[segment_index] = modified_data
+           return JSONResponse(
+               content={"status": "success"},
+               status_code=200
+           )
+       else:
+           raise HTTPException(status_code=400, detail="Invalid segment index")
+           
    except Exception as e:
        raise HTTPException(status_code=500, detail=str(e))

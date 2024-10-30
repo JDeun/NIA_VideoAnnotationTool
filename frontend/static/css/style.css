@@ -74,6 +74,8 @@ input[type="text"] {
    font-size: 0.85rem;
    cursor: pointer;
    transition: all 0.2s ease;
+   white-space: nowrap;
+   min-width: max-content;
 }
 
 .btn:hover {
@@ -92,7 +94,6 @@ input[type="text"] {
 .small-btn {
    padding: 0.3rem 0.6rem;
    font-size: 0.8rem;
-   min-width: 50px;
 }
 
 /* 비디오 영역 */
@@ -103,23 +104,31 @@ input[type="text"] {
    border-radius: var(--border-radius);
    overflow: hidden;
    box-shadow: var(--tinder-shadow);
+   min-height: 0;
+   aspect-ratio: 16/9;
 }
 
 video {
    width: 100%;
    height: 100%;
-   object-fit: contain;
+   object-fit: fill;
 }
 
 /* 컨트롤 영역 */
 .controls {
    display: grid;
-   grid-template-columns: repeat(6, 1fr) 2fr;
+   grid-template-columns: repeat(6, minmax(min-content, 1fr)) 2fr;
    gap: 0.5rem;
    background: var(--tinder-light);
-   padding: 0.8rem;
+   padding: 0.6rem;
    border-radius: var(--border-radius);
    box-shadow: var(--tinder-shadow);
+}
+
+.control-btn {
+   font-size: 0.8rem;
+   padding: 0.4rem;
+   text-align: center;
 }
 
 .highlight-btn {
@@ -130,6 +139,9 @@ video {
    text-align: right;
    padding: 0.4rem;
    font-size: 0.85rem;
+   display: flex;
+   align-items: center;
+   justify-content: flex-end;
 }
 
 /* 타임라인 */
@@ -155,8 +167,10 @@ video {
    top: 0;
 }
 
+/* 세그먼트 스타일 */
 .segment {
    position: absolute;
+   height: 14px;
    border-radius: 2px;
    cursor: pointer;
    transition: all 0.2s ease;
@@ -165,6 +179,24 @@ video {
 .segment:hover {
    transform: translateY(-1px);
    box-shadow: var(--tinder-shadow);
+}
+
+.segment .handle {
+   position: absolute;
+   width: 8px;
+   height: 100%;
+   background: rgba(255, 255, 255, 0.5);
+   cursor: ew-resize;
+}
+
+.segment .handle.left {
+   left: 0;
+   border-radius: 2px 0 0 2px;
+}
+
+.segment .handle.right {
+   right: 0;
+   border-radius: 0 2px 2px 0;
 }
 
 .temporary-marker {
@@ -283,8 +315,40 @@ tr.active {
    border-color: var(--tinder-primary);
 }
 
+/* 프레임 입력 영역 */
+.frame-input {
+   display: grid;
+   grid-template-columns: 1fr 1fr;
+   gap: 1rem;
+   margin: 1rem 0;
+}
+
+.frame-group {
+   display: flex;
+   flex-direction: column;
+   gap: 0.4rem;
+}
+
+.frame-group label {
+   font-size: 0.85rem;
+   color: var(--tinder-text);
+}
+
+.frame-group input {
+   padding: 0.4rem;
+   border: 1px solid #ddd;
+   border-radius: var(--border-radius);
+   font-size: 0.9rem;
+}
+
 .modal-input {
    margin: 1rem 0;
+}
+
+.modal-input label {
+   display: block;
+   margin-bottom: 0.4rem;
+   font-size: 0.85rem;
 }
 
 textarea {
@@ -299,11 +363,20 @@ textarea {
 
 .modal-buttons {
    display: flex;
-   justify-content: flex-end;
+   justify-content: space-between;
+   margin-top: 1rem;
+}
+
+.right-buttons {
+   display: flex;
    gap: 0.5rem;
 }
 
-/* 진행바 */
+.delete-btn {
+   background: #dc3545;
+}
+
+/* 프로그레스바 */
 .progress-container {
    height: 3px;
    background: #eee;
