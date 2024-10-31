@@ -1,90 +1,15 @@
-from fastapi import APIRouter, HTTPException, Body, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from typing import Dict
 import json
 from pathlib import Path
 import os
 from urllib.parse import unquote
-import shutil  # 파일 백업용
+import shutil
+import cv2
+from datetime import datetime
 
 router = APIRouter(prefix="/api", tags=["annotations"])
-
-# 현재 메모리에 저장된 어노테이션 데이터
-annotations_data = {}
-
-@router.post("/annotations/{video_name}")
-async def save_annotations(video_name: str, data: Dict = Body(...)):
-   """임시 어노테이션 저장"""
-   try:
-       annotations_data[video_name] = data
-       return JSONResponse(
-           content={"status": "success"},
-           status_code=200
-       )
-   except Exception as e:
-       raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/annotations/{video_name}")
-async def get_annotations(video_name: str):
-   """어노테이션 조회"""
-   try:
-       # 메모리에서 먼저 확인
-       if video_name in annotations_data:
-           return annotations_data[video_name]
-       
-       # 파일에서 확인
-       video_path = unquote(video_name)
-       json_path = Path(video_path).with_suffix('.json')
-       
-       if json_path.exists():
-           with open(json_path, 'r', encoding='utf-8') as f:
-               data = json.load(f)
-               annotations_data[video_name] = data  # 메모리에 캐시
-               return data
-               
-       # 없으면 빈 데이터 반환
-       return {
-           "annotations": {
-               "start_time": "",
-               "end_time": "",
-               "temporal_action_localization": []
-           }
-       }
-   except Exception as e:
-       raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/complete/{video_name}")
-async def complete_annotations(video_name: str, is_modify: bool = False):
-   """최종 저장 (신규 생성 또는 수정)"""
-   try:
-       if video_name not in annotations_data:
-           raise HTTPException(status_code=404, detail="Annotations not found")
-           
-       output_path = Path(unquote(video_name)).with_suffix('.json')
-       
-       # 수정 모드일 경우 기존 파일 백업
-       if is_modify and output_path.exists():
-           backup_path = output_path.with_suffix('.json.bak')
-           shutil.copy2(output_path, backup_path)
-       
-       output_path.parent.mkdir(parents=True, exist_ok=True)
-       
-       with open(output_path, 'w', encoding='utf-8') as f:
-           json.dump(annotations_data[video_name], f, ensure_ascii=False, indent=2)
-       
-       # 메모리에서 데이터 삭제
-       del annotations_data[video_name]
-       
-       return JSONResponse(
-           content={
-               "status": "success",
-               "message": "수정 완료" if is_modify else "저장 완료",
-               "file": str(output_path)
-           },
-           status_code=200
-       )
-   except Exception as e:
-       raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/check-annotation")
 async def check_annotation(path: str):
@@ -105,49 +30,200 @@ async def check_annotation(path: str):
 
 @router.post("/save-annotation")
 async def save_annotation(file: UploadFile = File(...), path: str = Form(...)):
-   """어노테이션 저장"""
+    """어노테이션 저장"""
+    try:
+        print(f"Saving annotation for path: {path}")  # 디버깅용 로그
+
+        if path.startswith('blob:'):
+            raise HTTPException(status_code=400, detail="Invalid file path")
+
+        # 파일 경로 처리
+        video_path = unquote(path)
+        json_path = Path(video_path).with_suffix('.json')
+        
+        print(f"JSON path: {json_path}")  # 디버깅용 로그
+        
+        # 디렉토리가 없으면 생성
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 새로운 데이터 로드
+        content = await file.read()
+        try:
+            new_data = json.loads(content)
+            print(f"New data loaded: {new_data.keys()}")  # 디버깅용 로그
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
+
+        save_data = None
+        if json_path.exists():
+            print("Existing file found - updating")  # 디버깅용 로그
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+                
+                # 백업 생성
+                backup_path = json_path.with_suffix('.json.bak')
+                shutil.copy2(json_path, backup_path)
+
+                # 새로운 segments만 업데이트
+                updated_segments = []
+                existing_segments = {s.get('segment_id'): s for s in existing_data.get('segments', [])}
+                new_segments = {s.get('segment_id'): s for s in new_data.get('segments', [])}
+
+                # 모든 segment_id에 대해 처리
+                all_segment_ids = set(existing_segments.keys()) | set(new_segments.keys())
+                for segment_id in all_segment_ids:
+                    if segment_id in new_segments:
+                        updated_segments.append(new_segments[segment_id])
+                    elif segment_id in existing_segments:
+                        updated_segments.append(existing_segments[segment_id])
+
+                # segments만 업데이트하고 나머지는 기존 데이터 유지
+                existing_data['segments'] = sorted(
+                    updated_segments, 
+                    key=lambda x: x.get('segment_id', 0)
+                )
+                save_data = existing_data
+                
+            except Exception as e:
+                print(f"Error processing existing file: {e}")  # 디버깅용 로그
+                raise HTTPException(status_code=500, detail=f"Error processing existing file: {str(e)}")
+        else:
+            print("Creating new file")  # 디버깅용 로그
+            try:
+                # 새 파일 생성의 경우
+                video_info = {
+                    "filename": Path(video_path).name,
+                    "format": Path(video_path).suffix[1:],
+                    "size": 0,
+                    "width_height": [0, 0],
+                    "environment": 1,
+                    "device": "KIOSK",
+                    "frame_rate": 15,
+                    "playtime": 0,
+                    "date": datetime.now().strftime("%Y-%m-%d")
+                }
+
+                # 비디오 파일이 존재하면 실제 정보로 업데이트
+                if Path(video_path).exists():
+                    try:
+                        video_file = Path(video_path)
+                        cap = cv2.VideoCapture(str(video_file))
+                        video_info.update({
+                            "size": video_file.stat().st_size,
+                            "width_height": [
+                                int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                                int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            ],
+                            "playtime": cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
+                        })
+                        cap.release()
+                    except Exception as e:
+                        print(f"Error getting video info: {e}")  # 비디오 정보 획득 실패해도 계속 진행
+
+                save_data = {
+                    "info": video_info,
+                    "segments": new_data.get('segments', []),
+                    "additional_info": {
+                        "InteractionType": "Touchscreen"
+                    }
+                }
+
+            except Exception as e:
+                print(f"Error creating new file: {e}")  # 디버깅용 로그
+                raise HTTPException(status_code=500, detail=f"Error creating new file: {str(e)}")
+
+        # 저장 전 데이터 검증
+        try:
+            validate_data_structure(save_data)
+            print("Data validation passed")  # 디버깅용 로그
+        except ValueError as e:
+            print(f"Validation error: {e}")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail=str(e))
+
+        # 파일 저장
+        try:
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(save_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving file: {e}")  # 디버깅용 로그
+            raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Annotations saved successfully",
+                "path": str(json_path)
+            },
+            status_code=200
+        )
+    except Exception as e:
+        print(f"Unexpected error: {e}")  # 디버깅용 로그
+        raise HTTPException(status_code=500, detail=str(e))
+
+def validate_data_structure(data):
+    """데이터 구조 검증"""
+    if not isinstance(data, dict):
+        raise ValueError("Data must be a dictionary")
+        
+    required_sections = ['info', 'segments', 'additional_info']
+    for section in required_sections:
+        if section not in data:
+            raise ValueError(f"Missing required section: {section}")
+            
+    if not isinstance(data['segments'], list):
+        raise ValueError("Segments must be a list")
+        
+    for segment in data['segments']:
+        if not isinstance(segment, dict):
+            raise ValueError("Each segment must be a dictionary")
+            
+        required_fields = [
+            'segment_id', 'start_time', 'end_time',
+            'duration', 'action', 'caption',
+            'age', 'gender', 'disability'
+        ]
+        
+        for field in required_fields:
+            if field not in segment:
+                raise ValueError(f"Missing required field in segment: {field}")
+
+@router.get("/annotations/{video_path:path}")
+async def get_annotations(video_path: str):
+   """어노테이션 조회"""
    try:
-       if path.startswith('blob:'):
-           raise HTTPException(status_code=400, detail="Invalid file path")
-
-       # 파일 경로 처리
-       video_path = unquote(path)
-       if os.path.isabs(video_path):
-           json_path = Path(video_path).with_suffix('.json')
-       else:
-           json_path = Path(video_path).with_suffix('.json')
-
-       # 디렉토리가 없으면 생성
-       json_path.parent.mkdir(parents=True, exist_ok=True)
+       # URL 디코딩
+       decoded_path = unquote(video_path)
+       json_path = Path(decoded_path).with_suffix('.json')
        
-       # 파일 내용 읽기 및 저장
-       content = await file.read()
-       json_path.write_bytes(content)
-       
-       return JSONResponse(
-           content={
-               "status": "success",
-               "message": "Annotations saved successfully",
-               "path": str(json_path)
-           },
-           status_code=200
-       )
+       if not json_path.exists():
+           return JSONResponse(
+               content={"segments": []},
+               status_code=200
+           )
+           
+       # JSON 파일 읽기
+       with open(json_path, 'r', encoding='utf-8') as f:
+           data = json.load(f)
+           return JSONResponse(content=data, status_code=200)
+
    except Exception as e:
        raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/delete-annotation/{video_name}")
-async def delete_annotation(video_name: str):
+@router.delete("/delete-annotation/{video_path:path}")
+async def delete_annotation(video_path: str):
    """어노테이션 삭제"""
    try:
-       # 메모리에서 삭제
-       if video_name in annotations_data:
-           del annotations_data[video_name]
-
-       # 파일 삭제
-       video_path = unquote(video_name)
-       json_path = Path(video_path).with_suffix('.json')
+       decoded_path = unquote(video_path)
+       json_path = Path(decoded_path).with_suffix('.json')
        
        if json_path.exists():
+           # 삭제 전 백업
+           backup_path = json_path.with_suffix('.json.bak')
+           shutil.copy2(json_path, backup_path)
+           
+           # 파일 삭제
            json_path.unlink()
 
        return JSONResponse(
@@ -157,35 +233,43 @@ async def delete_annotation(video_name: str):
    except Exception as e:
        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/modify-segment/{video_name}")
-async def modify_segment(
-   video_name: str, 
-   segment_index: int = Body(...),
-   modified_data: Dict = Body(...)
-):
-   """개별 세그먼트 수정"""
-   try:
-       if video_name not in annotations_data:
-           # 파일에서 데이터 로드
-           video_path = unquote(video_name)
-           json_path = Path(video_path).with_suffix('.json')
-           
-           if json_path.exists():
-               with open(json_path, 'r', encoding='utf-8') as f:
-                   annotations_data[video_name] = json.load(f)
-           else:
-               raise HTTPException(status_code=404, detail="Annotations not found")
+def validate_segment(segment: Dict):
+   """세그먼트 데이터 검증"""
+   required_fields = [
+       'segment_id', 'start_time', 'end_time', 'duration',
+       'action', 'caption', 'age', 'gender', 'disability'
+   ]
+
+   for field in required_fields:
+       if field not in segment:
+           raise ValueError(f"Missing required field in segment: {field}")
+
+   # 값 범위 검증
+   if not (1 <= segment['action'] <= 4):
+       raise ValueError("Invalid action value (must be 1-4)")
        
-       # 세그먼트 수정
-       segments = annotations_data[video_name]["annotations"]["temporal_action_localization"]
-       if 0 <= segment_index < len(segments):
-           segments[segment_index] = modified_data
-           return JSONResponse(
-               content={"status": "success"},
-               status_code=200
-           )
-       else:
-           raise HTTPException(status_code=400, detail="Invalid segment index")
-           
-   except Exception as e:
-       raise HTTPException(status_code=500, detail=str(e))
+   if not (1 <= segment['age'] <= 3):
+       raise ValueError("Invalid age value (must be 1-3)")
+       
+   if not (1 <= segment['gender'] <= 2):
+       raise ValueError("Invalid gender value (must be 1-2)")
+       
+   if not (1 <= segment['disability'] <= 2):
+       raise ValueError("Invalid disability value (must be 1-2)")
+
+   # 시간 검증
+   try:
+       start_time = float(segment['start_time'])
+       end_time = float(segment['end_time'])
+       if start_time >= end_time:
+           raise ValueError("start_time must be less than end_time")
+   except ValueError:
+       raise ValueError("Invalid time format")
+
+   # duration 검증
+   try:
+       duration = float(segment['duration'])
+       if duration <= 0:
+           raise ValueError("Duration must be positive")
+   except ValueError:
+       raise ValueError("Invalid duration format")

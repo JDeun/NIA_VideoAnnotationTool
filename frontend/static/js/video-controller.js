@@ -5,7 +5,7 @@ class VideoController {
         this.timeCount = document.getElementById('timeCount');
         this.timelineMarker = document.getElementById('timelineMarker');
         
-        this.FPS = 30;
+        this.FPS = 15; // 30fps에서 15fps로 변경
         this.isPlaying = false;
         this.controlsEnabled = true;
         this.currentVideoPath = null;
@@ -71,13 +71,13 @@ class VideoController {
         this.prevSecondBtn.addEventListener('click', () => this.moveSecond(-1));
         this.nextSecondBtn.addEventListener('click', () => this.moveSecond(1));
         
-        // 구간 표시 버튼 이벤트 추가
+        // 구간 표시 버튼 이벤트 
         this.markPointBtn.addEventListener('click', () => {
             this.pause();
             timelineController.markTimelinePoint();
         });
  
-        // 작성 완료 버튼 이벤트 추가
+        // 작성 완료 버튼 이벤트
         this.completeButton.addEventListener('click', () => {
             timelineController.handleComplete();
         });
@@ -88,12 +88,10 @@ class VideoController {
  
     showLoading() {
         this.video.style.opacity = '0.5';
-        // 로딩 인디케이터 표시 로직 추가
     }
  
     hideLoading() {
         this.video.style.opacity = '1';
-        // 로딩 인디케이터 숨김 로직 추가
     }
  
     updatePlayPauseButton() {
@@ -118,7 +116,7 @@ class VideoController {
     moveFrame(frames) {
         if (!this.controlsEnabled || !this.video.src) return;
         
-        const frameTime = 1 / this.FPS;
+        const frameTime = 1 / this.FPS;  // 15fps 기준으로 시간 계산
         this.video.currentTime = Math.max(0, 
             Math.min(this.video.duration, 
                 this.video.currentTime + (frames * frameTime)
@@ -141,10 +139,11 @@ class VideoController {
         if (!this.video.src) return;
         
         const currentFrame = Math.floor(this.video.currentTime * this.FPS);
+        const totalFrames = Math.floor(this.video.duration * this.FPS);
         const currentTime = this.video.currentTime.toFixed(2);
         
-        this.frameCount.textContent = currentFrame;
-        this.timeCount.textContent = currentTime;
+        this.frameCount.textContent = `${currentFrame}/${totalFrames}`;
+        this.timeCount.textContent = `${currentTime}/${this.video.duration.toFixed(2)}`;
     }
  
     updateTimelineMarker() {
@@ -170,7 +169,7 @@ class VideoController {
             'ArrowLeft': (e) => {
                 e.preventDefault();
                 if (e.ctrlKey) {
-                    this.moveFrame(-1);
+                    this.moveFrame(-1);  // 한 프레임 뒤로 (1/15초)
                 } else {
                     this.moveSecond(-1);
                 }
@@ -178,7 +177,7 @@ class VideoController {
             'ArrowRight': (e) => {
                 e.preventDefault();
                 if (e.ctrlKey) {
-                    this.moveFrame(1);
+                    this.moveFrame(1);  // 한 프레임 앞으로 (1/15초)
                 } else {
                     this.moveSecond(1);
                 }
@@ -210,6 +209,22 @@ class VideoController {
             console.error('비디오 로드 에러:', error);
             throw error;
         }
+    }
+ 
+    getCurrentFrame() {
+        return Math.floor(this.video.currentTime * this.FPS);
+    }
+ 
+    getTotalFrames() {
+        return Math.floor(this.video.duration * this.FPS);
+    }
+ 
+    frameToTime(frame) {
+        return frame / this.FPS;
+    }
+ 
+    timeToFrame(time) {
+        return Math.floor(time * this.FPS);
     }
  
     pause() {
