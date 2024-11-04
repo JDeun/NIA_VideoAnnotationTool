@@ -322,8 +322,8 @@ class TimelineController {
         }
 
         try {
-            const startFrame = parseInt(this.startFrameInput);
-            const endFrame = parseInt(this.endFrameInput);
+            const startFrame = parseInt(this.startFrameInput.value);
+            const endFrame = parseInt(this.endFrameInput.value);
 
             const segment = {
                 segment_id: this.editingSegmentIndex !== null ? this.editingSegmentIndex : this.segments.length,
