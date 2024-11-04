@@ -1,20 +1,20 @@
 class TimelineController {
     constructor() {
-        this.timeline = document.getElementById('timeline');
-        this.modal = document.getElementById('segmentModal');
-        this.modalTitle = document.getElementById('modalTitle');
-        this.actionButtons = document.querySelectorAll('.action-type-btn');
-        this.saveSegmentBtn = document.getElementById('saveSegment');
-        this.deleteSegmentBtn = document.getElementById('deleteSegment');
-        this.cancelSegmentBtn = document.getElementById('cancelSegment');
-        this.markPointBtn = document.getElementById('markPoint');
-        
-        this.captionInput = document.getElementById('captionInput');
-        this.startFrameInput = document.getElementById('startFrame');
-        this.endFrameInput = document.getElementById('endFrame');
-        this.ageSelect = document.getElementById('age');
-        this.genderInputs = document.getElementsByName('gender');
-        this.disabilityInputs = document.getElementsByName('disability');
+        this.timeline = document.getElementById("timeline");
+        this.modal = document.getElementById("segmentModal");
+        this.modalTitle = document.getElementById("modalTitle");
+        this.actionButtons = document.querySelectorAll(".action-type-btn");
+        this.saveSegmentBtn = document.getElementById("saveSegment");
+        this.deleteSegmentBtn = document.getElementById("deleteSegment");
+        this.cancelSegmentBtn = document.getElementById("cancelSegment");
+        this.completeButton = document.getElementById("completeButton");
+        this.markPointBtn = document.getElementById("markPoint");
+        this.captionInput = document.getElementById("captionInput");
+        this.startFrameInput = document.getElementById("startFrame");
+        this.endFrameInput = document.getElementById("endFrame");
+        this.ageInputs = document.getElementsByName("age");
+        this.genderInputs = document.getElementsByName("gender");
+        this.disabilityInputs = document.getElementsByName("disability");
 
         this.segments = [];
         this.currentSegment = null;
@@ -22,515 +22,543 @@ class TimelineController {
         this.lastEndTime = null;
         this.temporaryMarker = null;
         this.editingSegmentIndex = null;
-        this.FPS = 15;
-        this.tempSegment = null;
+        this.isDragging = false;
+        this.draggedSegment = null;
+        this.dragStartX = 0;
+        this.originalStartFrame = 0;
+        this.originalEndFrame = 0;
+        this.dragType = null;
 
-        this.lastUserInfo = {
-            age: '1',
-            gender: '1',
-            disability: '2'
+        // 신규 생성 시 사용할 기본값
+        this.defaultValues = {
+            age: null,
+            gender: null,
+            disability: null
         };
-        this.reset();
-        this.initializeEventListeners();
-    }
 
-    reset() {
-        this.currentSegment = null;
-        this.temporaryMarker = null;
-        this.markPointBtn.textContent = '구간 표시';
-        this.markPointBtn.classList.remove('active');
+        // 신규/수정 모드 구분
+        this.isNewFile = true;
+
+        this.initializeEventListeners();
     }
 
     initializeEventListeners() {
         // 액션 타입 버튼 이벤트
-        this.actionButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                this.actionButtons.forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
+        this.actionButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                this.actionButtons.forEach((btn) => btn.classList.remove("active"));
+                button.classList.add("active");
                 this.selectedActionType = parseInt(button.dataset.action);
                 this.validateSegmentData();
             });
         });
 
+        // 캡션 입력 이벤트 추가
+        this.captionInput.addEventListener('input', () => {
+            this.validateSegmentData();
+        });
+
+        // 속성 라디오 버튼 이벤트
+        this.ageInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if(this.isNewFile) {
+                    this.defaultValues.age = parseInt(input.value);
+                }
+                this.validateSegmentData();
+            });
+        });
+
+        this.genderInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if(this.isNewFile) {
+                    this.defaultValues.gender = parseInt(input.value);
+                }
+                this.validateSegmentData();
+            });
+        });
+
+        this.disabilityInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if(this.isNewFile) {
+                    this.defaultValues.disability = parseInt(input.value);
+                }
+                this.validateSegmentData();
+            });
+        });
+
         // 프레임 입력 이벤트
-        this.startFrameInput.addEventListener('change', () => this.handleFrameInputChange('start'));
-        this.endFrameInput.addEventListener('change', () => this.handleFrameInputChange('end'));
+        this.startFrameInput.addEventListener("change", () => this.handleFrameInputChange("start"));
+        this.endFrameInput.addEventListener("change", () => this.handleFrameInputChange("end"));
 
         // 버튼 이벤트
-        this.saveSegmentBtn.addEventListener('click', () => this.handleSegmentSave());
-        this.deleteSegmentBtn.addEventListener('click', () => this.handleSegmentDelete());
-        this.cancelSegmentBtn.addEventListener('click', () => this.hideModal());
-        this.markPointBtn.addEventListener('click', () => this.markTimelinePoint());
+        this.saveSegmentBtn.addEventListener("click", () => this.handleSegmentSave());
+        this.deleteSegmentBtn.addEventListener("click", () => this.handleSegmentDelete());
+        this.cancelSegmentBtn.addEventListener("click", () => this.hideModal());
+        this.completeButton.addEventListener("click", () => this.handleComplete());
 
         // 모달 외부 클릭 시 닫기
-        this.modal.addEventListener('click', (e) => {
+        this.modal.addEventListener("click", (e) => {
             if (e.target === this.modal) this.hideModal();
         });
 
-        // 키보드 이벤트
-        document.addEventListener('keydown', (e) => {
-            if (this.modal.style.display !== 'block') return;
-            
-            if (e.key === 'Escape') {
+        // ESC/Enter 키 이벤트
+        document.addEventListener("keydown", (e) => {
+            if (this.modal.style.display !== "block") return;
+            if (e.key === "Escape") {
                 this.hideModal();
-            } else if (e.key === 'Enter' && !e.shiftKey) {
+            } else if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 this.handleSegmentSave();
             }
         });
+
+        // 타임라인 이벤트
+        this.timeline.addEventListener("mousedown", (e) => this.handleTimelineMouseDown(e));
+        document.addEventListener("mousemove", (e) => this.handleTimelineMouseMove(e));
+        document.addEventListener("mouseup", () => this.handleTimelineMouseUp());
+    }
+
+    handleTimelineMouseDown(e) {
+        const segment = e.target.closest(".segment");
+        if (!segment) return;
+
+        this.isDragging = true;
+        this.draggedSegment = segment;
+        this.dragStartX = e.clientX;
+        const index = parseInt(segment.dataset.index);
+        const segmentData = this.segments[index];
+
+        if (e.target.classList.contains("handle-left")) {
+            this.dragType = "left";
+        } else if (e.target.classList.contains("handle-right")) {
+            this.dragType = "right";
+        } else {
+            this.dragType = "move";
+        }
+
+        this.originalStartFrame = segmentData.start_frame;
+        this.originalEndFrame = segmentData.end_frame;
+
+        e.preventDefault();
+    }
+
+    handleTimelineMouseMove(e) {
+        if (!this.isDragging) return;
+
+        const timelineRect = this.timeline.getBoundingClientRect();
+        const video = document.getElementById("videoPlayer");
+        const totalFrames = video.duration * 15;
+        const pixelsPerFrame = timelineRect.width / totalFrames;
+        const framesDelta = Math.round((e.clientX - this.dragStartX) / pixelsPerFrame);
+
+        const index = parseInt(this.draggedSegment.dataset.index);
+        const segment = this.segments[index];
+
+        switch (this.dragType) {
+            case "left":
+                const newStartFrame = Math.max(0, this.originalStartFrame + framesDelta);
+                if (newStartFrame < segment.end_frame) {
+                    segment.start_frame = newStartFrame;
+                    segment.duration = (segment.end_frame - newStartFrame) / 15;
+                }
+                break;
+
+            case "right":
+                const newEndFrame = Math.min(totalFrames, this.originalEndFrame + framesDelta);
+                if (newEndFrame > segment.start_frame) {
+                    segment.end_frame = newEndFrame;
+                    segment.duration = (newEndFrame - segment.start_frame) / 15;
+                }
+                break;
+
+            case "move":
+                const minFrame = Math.max(0, this.originalStartFrame + framesDelta);
+                const maxFrame = Math.min(totalFrames, this.originalEndFrame + framesDelta);
+                const duration = this.originalEndFrame - this.originalStartFrame;
+
+                if (minFrame >= 0 && maxFrame <= totalFrames) {
+                    segment.start_frame = minFrame;
+                    segment.end_frame = maxFrame;
+                    segment.duration = duration / 15;
+                }
+                break;
+        }
+
+        this.renderSegments();
+        fileHandler.hasModifiedContent = true;
+    }
+
+    handleTimelineMouseUp() {
+        if (this.isDragging) {
+            this.isDragging = false;
+            this.draggedSegment = null;
+            this.saveAnnotations();
+        }
     }
 
     handleFrameInputChange(type) {
-        const frame = parseInt(type === 'start' ? this.startFrameInput.value : this.endFrameInput.value);
-        if (isNaN(frame)) return;
+        const video = document.getElementById("videoPlayer");
+        const totalFrames = Math.floor(video.duration * 15);
 
-        const video = document.getElementById('videoPlayer');
-        video.currentTime = frame / this.FPS;
-        this.validateSegmentData();
-    }
+        let startFrame = parseInt(this.startFrameInput.value);
+        let endFrame = parseInt(this.endFrameInput.value);
 
-    frameToTimestamp(frame) {
-        const seconds = frame / this.FPS;
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const remainingSeconds = seconds % 60;
-        return `${hours}:${String(minutes).padStart(2, '0')}:${remainingSeconds.toFixed(6)}`;
-    }
+        startFrame = Math.max(0, Math.min(startFrame, totalFrames));
+        endFrame = Math.max(0, Math.min(endFrame, totalFrames));
 
-    timestampToFrame(timestamp) {
-        if (!timestamp) return 0;
-        
-        try {
-            const [hours, minutes, seconds] = timestamp.split(':').map(Number);
-            return Math.round((hours * 3600 + minutes * 60 + seconds) * this.FPS);
-        } catch (error) {
-            console.error('Invalid timestamp format:', timestamp);
-            return 0;
-        }
-    }
-
-    markTimelinePoint() {
-        const video = document.getElementById('videoPlayer');
-        videoController.pause();
-    
-        if (!video.src) {
-            alert('먼저 비디오를 로드해주세요.');
-            return;
-        }
-    
-        const currentTime = video.currentTime;
-        const currentFrame = Math.floor(currentTime * this.FPS);
-    
-        if (!this.currentSegment) {
-            this.currentSegment = {
-                start: currentTime,
-                startFrame: currentFrame
-            };
-            this.showTemporaryMarker(currentTime);
-            this.markPointBtn.textContent = '구간 종료';
-            this.markPointBtn.classList.add('active');
-        } else {
-            if (currentFrame <= this.currentSegment.startFrame) {
-                alert('종료 시점은 시작 시점보다 뒤여야 합니다.');
-                return;
-            }
-            this.showModal({
-                ...this.currentSegment,
-                end: currentTime,
-                endFrame: currentFrame
-            });
-            this.reset();
-        }
-    }
-    
-
-    showModal(segment = null, isEdit = false) {
-        videoController.pause();
-        videoController.disableControls();
-        this.modal.style.display = 'block';
-        
-        let startFrame = 0;
-        let endFrame = 0;
-
-        if (segment) {
-            startFrame = segment.startFrame || 0;
-            endFrame = segment.endFrame || 0;
-            this.tempSegment = segment;
-        } else {
-            const video = document.getElementById('videoPlayer');
-            const currentFrame = Math.floor(video.currentTime * this.FPS);
-            startFrame = currentFrame;
-            endFrame = currentFrame + this.FPS;
-            this.tempSegment = { startFrame, endFrame };
+        if (type === "start" && startFrame >= endFrame) {
+            startFrame = endFrame - 1;
+        } else if (type === "end" && endFrame <= startFrame) {
+            endFrame = startFrame + 1;
         }
 
         this.startFrameInput.value = startFrame;
         this.endFrameInput.value = endFrame;
-        
-        if (isEdit && this.editingSegmentIndex !== null) {
-            const segmentData = this.segments[this.editingSegmentIndex];
-            this.modalTitle.textContent = '구간 정보 수정';
-            this.deleteSegmentBtn.style.display = 'block';
-            
-            document.querySelectorAll('.action-type-btn').forEach(btn => {
-                btn.classList.toggle('active', parseInt(btn.dataset.action) === segmentData.action);
+
+        if (this.tempSegment) {
+            this.tempSegment.startFrame = startFrame;
+            this.tempSegment.endFrame = endFrame;
+        }
+    }
+
+    markTimelinePoint() {
+        const video = document.getElementById("videoPlayer");
+        videoController.pause();
+
+        if (!video.src) {
+            alert("먼저 비디오를 로드해주세요.");
+            return;
+        }
+
+        const currentFrame = Math.floor(video.currentTime * 15);
+
+        if (!this.currentSegment) {
+            this.currentSegment = {
+                startFrame: this.lastEndTime ?? currentFrame,
+            };
+            this.showTemporaryMarker((this.currentSegment.startFrame / 15));
+            this.markPointBtn.textContent = "구간 종료";
+            this.markPointBtn.classList.add("active");
+        } else {
+            if (currentFrame <= this.currentSegment.startFrame) {
+                alert("종료 시점은 시작 시점보다 뒤여야 합니다.");
+                return;
+            }
+            this.showModal({
+                ...this.currentSegment,
+                endFrame: currentFrame,
             });
+            this.markPointBtn.textContent = "구간 표시";
+            this.markPointBtn.classList.remove("active");
+        }
+    }
+
+    showModal(segment, isEdit = false) {
+        videoController.pause();
+        videoController.disableControls();
+
+        this.modal.style.display = "block";
+        this.tempSegment = segment;
+        this.modalTitle.textContent = isEdit ? "구간 정보 수정" : "구간 정보 입력";
+
+        this.startFrameInput.value = segment.startFrame;
+        this.endFrameInput.value = segment.endFrame;
+
+        if (isEdit) {
+            this.deleteSegmentBtn.style.display = "block";
+            const segmentData = this.segments[this.editingSegmentIndex];
             this.selectedActionType = segmentData.action;
-            
             this.captionInput.value = segmentData.caption;
-            this.ageSelect.value = segmentData.age;
+
+            this.setRadioValue('age', segmentData.age);
             this.setRadioValue('gender', segmentData.gender);
             this.setRadioValue('disability', segmentData.disability);
+
+            this.actionButtons.forEach((btn) => {
+                if (parseInt(btn.dataset.action) === segmentData.action) {
+                    btn.classList.add("active");
+                } else {
+                    btn.classList.remove("active");
+                }
+            });
         } else {
-            this.modalTitle.textContent = '구간 정보 입력';
-            this.deleteSegmentBtn.style.display = 'none';
-            
-            document.getElementById('age').value = this.lastUserInfo.age;
-            this.setRadioValue('gender', this.lastUserInfo.gender);
-            this.setRadioValue('disability', this.lastUserInfo.disability);
-            
-            document.querySelectorAll('.action-type-btn').forEach(btn => btn.classList.remove('active'));
+            this.deleteSegmentBtn.style.display = "none";
+            this.actionButtons.forEach((btn) => btn.classList.remove("disabled"));
             this.selectedActionType = null;
-            this.captionInput.value = '';
+            this.captionInput.value = "";
+
+            if (this.isNewFile) {
+                this.setRadioValue('age', this.defaultValues.age);
+                this.setRadioValue('gender', this.defaultValues.gender);
+                this.setRadioValue('disability', this.defaultValues.disability);
+            }
         }
-        
+
         this.validateSegmentData();
     }
 
     hideModal() {
-        this.modal.style.display = 'none';
+        this.modal.style.display = "none";
         this.currentSegment = null;
         this.selectedActionType = null;
         this.editingSegmentIndex = null;
-        this.captionInput.value = '';
-        
+        this.captionInput.value = "";
+
         videoController.enableControls();
-        
+
         if (this.temporaryMarker) {
             this.temporaryMarker.remove();
             this.temporaryMarker = null;
         }
-        
-        this.markPointBtn.textContent = '구간 표시';
-        this.markPointBtn.classList.remove('active');
-    }
 
-    validateSegmentData() {
-        const startFrame = parseInt(this.startFrameInput.value);
-        const endFrame = parseInt(this.endFrameInput.value);
-        
-        if (isNaN(startFrame) || isNaN(endFrame) || startFrame >= endFrame) {
-            this.saveSegmentBtn.disabled = true;
-            return false;
-        }
-        
-        const video = document.getElementById('videoPlayer');
-        const maxFrame = Math.floor(video.duration * this.FPS);
-        
-        if (startFrame < 0 || endFrame > maxFrame) {
-            this.saveSegmentBtn.disabled = true;
-            return false;
-        }
-        
-        this.saveSegmentBtn.disabled = !this.selectedActionType || 
-                                     !this.captionInput.value.trim() ||
-                                     !this.getRadioValue('gender') ||
-                                     !this.getRadioValue('disability');
-        
-        return !this.saveSegmentBtn.disabled;
+        this.markPointBtn.textContent = "구간 표시";
+        this.markPointBtn.classList.remove("active");
     }
 
     async handleSegmentSave() {
         if (!this.validateSegmentData()) {
-            alert('모든 필드를 입력해주세요.');
+            console.log("Validation failed, cannot save segment");
             return;
         }
 
         try {
-            const startFrame = parseInt(this.startFrameInput.value);
-            const endFrame = parseInt(this.endFrameInput.value);
-            
+            const startFrame = parseInt(this.startFrameInput);
+            const endFrame = parseInt(this.endFrameInput);
+
             const segment = {
-                segment_id: this.editingSegmentIndex ?? this.segments.length,
-                start_time: this.frameToTimestamp(startFrame),
-                end_time: this.frameToTimestamp(endFrame),
-                duration: (endFrame - startFrame) / this.FPS,
+                segment_id: this.editingSegmentIndex !== null ? this.editingSegmentIndex : this.segments.length,
+                start_frame: startFrame,
+                end_frame: endFrame,
+                duration: ((endFrame - startFrame) / 15).toFixed(6),
                 action: this.selectedActionType,
                 caption: this.captionInput.value.trim(),
-                age: parseInt(this.ageSelect.value),
-                gender: this.getRadioValue('gender'),
-                disability: this.getRadioValue('disability'),
+                age: this.isNewFile ? this.defaultValues.age : parseInt(this.getSelectedRadioValue('age')),
+                gender: this.isNewFile ? this.defaultValues.gender : parseInt(this.getSelectedRadioValue('gender')),
+                disability: this.isNewFile ? this.defaultValues.disability : parseInt(this.getSelectedRadioValue('disability')),
                 keyframes: []
             };
 
-            // 현재 사용자 정보 저장
-            this.lastUserInfo = {
-                age: segment.age.toString(),
-                gender: segment.gender.toString(),
-                disability: segment.disability.toString()
-            };
+            console.log('Saving segment:', segment);
 
             if (this.editingSegmentIndex !== null) {
                 this.segments[this.editingSegmentIndex] = segment;
             } else {
                 this.segments.push(segment);
-                this.lastEndTime = this.tempSegment.end;
+                this.lastEndTime = endFrame;
             }
 
             await this.saveAnnotations();
             this.renderSegments();
             this.hideModal();
-            
-            document.dispatchEvent(new CustomEvent('annotationModified'));
+            fileHandler.hasModifiedContent = true;
         } catch (error) {
-            console.error('세그먼트 저장 실패:', error);
-            alert('저장 중 오류가 발생했습니다.');
+            console.error("세그먼트 저장 실패:", error);
+            alert("저장 중 오류가 발생했습니다.");
         }
     }
 
     async handleSegmentDelete() {
         if (this.editingSegmentIndex === null) return;
-        
-        if (confirm('선택한 구간을 삭제하시겠습니까?')) {
+
+        if (confirm("선택한 구간을 삭제하시겠습니까?")) {
             this.segments.splice(this.editingSegmentIndex, 1);
-            
-            this.segments = this.segments.map((segment, index) => ({
-                ...segment,
-                segment_id: index
-            }));
-            
             await this.saveAnnotations();
             this.renderSegments();
             this.hideModal();
-            
-            document.dispatchEvent(new CustomEvent('annotationModified'));
+            fileHandler.hasModifiedContent = true;
         }
     }
 
-    async saveAnnotations() {
+    async handleComplete() {
         try {
-            const video = document.getElementById('videoPlayer');
+            if (this.segments.length === 0) {
+                alert('저장할 구간이 없습니다.');
+                return;
+            }
+
+            if (confirm('작성을 완료하시겠습니까?')) {
+                await this.saveAnnotations(true);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('저장 중 오류가 발생했습니다.');
+        }
+    }
+
+    async saveAnnotations(isComplete = false) {
+        try {
+            console.log("Current segments before save:", this.segments);
+            
             const annotations = {
                 info: {
-                    filename: videoController.currentVideoPath,
+                    filename: videoController.currentVideoPath.split('/').pop(),
                     format: 'mp4',
                     size: 0,
-                    width_height: [video.videoWidth, video.videoHeight],
+                    width_height: [0, 0],
                     environment: 1,
-                    device: 'KIOSK',
-                    frame_rate: this.FPS,
-                    playtime: video.duration,
+                    device: "KIOSK",
+                    frame_rate: 15,
+                    playtime: videoController.video.duration,
                     date: new Date().toISOString().split('T')[0]
                 },
-                segments: this.segments,
+                segments: this.segments.map(segment => ({
+                    ...segment,
+                    start_frame: parseInt(segment.start_frame),
+                    end_frame: parseInt(segment.end_frame),
+                    action: parseInt(segment.action),
+                    age: parseInt(segment.age),
+                    gender: parseInt(segment.gender),
+                    disability: parseInt(segment.disability)
+                })),
                 additional_info: {
-                    InteractionType: 'Touchscreen'
+                    InteractionType: "Touchscreen"
                 }
             };
 
-            await fileHandler.saveAnnotations(annotations);
+            console.log("Saving annotations:", annotations);
+            await fileHandler.saveAnnotations(annotations, isComplete);
+            console.log("Save completed");
+            
         } catch (error) {
-            console.error('Error:', error);
+            console.error('Error saving annotations:', error);
             throw error;
         }
     }
 
+    setRadioValue(name, value) {
+        if (value) {
+            const radio = document.querySelector(`input[name="${name}"][value="${value}"]`);
+            if (radio) radio.checked = true;
+        }
+    }
+
+    getSelectedRadioValue(name) {
+        const selected = document.querySelector(`input[name="${name}"]:checked`);
+        return selected ? selected.value : null;
+    }
+
+    validateSegmentData() {
+        const isValid = 
+            this.selectedActionType !== null && 
+            this.captionInput.value.trim() !== '' &&
+            this.startFrameInput.value !== '' &&
+            this.endFrameInput.value !== '' &&
+            (this.isNewFile ? 
+                (this.defaultValues.age && this.defaultValues.gender && this.defaultValues.disability) :
+                (this.getSelectedRadioValue('age') && this.getSelectedRadioValue('gender') && this.getSelectedRadioValue('disability'))
+            );
+
+        console.log('Validation Check:', {
+            actionType: this.selectedActionType,
+            caption: this.captionInput.value.trim(),
+            startFrame: this.startFrameInput.value,
+            endFrame: this.endFrameInput.value,
+            isNewFile: this.isNewFile,
+            defaultValues: this.defaultValues,
+            selectedValues: {
+                age: this.getSelectedRadioValue('age'),
+                gender: this.getSelectedRadioValue('gender'),
+                disability: this.getSelectedRadioValue('disability')
+            }
+        });
+        
+        this.saveSegmentBtn.disabled = !isValid;
+        return isValid;
+    }
+
     renderSegments() {
         this.clearSegments();
-        
+
         const colors = {
-            1: '#FFC107', // observe
-            2: '#2196F3', // approach
-            3: '#4CAF50', // use
-            4: '#F44336'  // complete
+            0: "#9E9E9E", // 기타: 회색
+            1: "#2196F3", // 접근: 파란색
+            2: "#4CAF50", // 사용: 초록색
+            3: "#F44336"  // 종료: 빨간색
         };
 
+        const video = document.getElementById("videoPlayer");
+        const totalFrames = video.duration * 15;
+
         this.segments.forEach((segment, index) => {
-            const el = document.createElement('div');
-            el.className = 'segment';
+            const el = document.createElement("div");
+            el.className = "segment";
             el.dataset.index = index;
-            
-            const video = document.getElementById('videoPlayer');
-            const startTime = this.timestampToFrame(segment.start_time) / this.FPS;
-            const endTime = this.timestampToFrame(segment.end_time) / this.FPS;
-            const startPct = (startTime / video.duration) * 100;
-            const endPct = (endTime / video.duration) * 100;
-            
+
+            const startPct = (segment.start_frame / totalFrames) * 100;
+            const endPct = (segment.end_frame / totalFrames) * 100;
+
             el.style.left = `${startPct}%`;
             el.style.width = `${endPct - startPct}%`;
             el.style.backgroundColor = colors[segment.action];
             el.style.top = `${(index % 3) * 16}px`;
-            
-            const tooltipText = `${this.getActionTypeText(segment.action)}\n` +
-                              `나이: ${this.getAgeText(segment.age)}\n` +
-                              `성별: ${this.getGenderText(segment.gender)}\n` +
-                              `장애: ${this.getDisabilityText(segment.disability)}\n` +
-                              `설명: ${segment.caption}`;
-            el.title = tooltipText;
 
-            const leftHandle = document.createElement('div');
-            leftHandle.className = 'handle left';
+            const leftHandle = document.createElement("div");
+            leftHandle.className = "handle handle-left";
             el.appendChild(leftHandle);
 
-            const rightHandle = document.createElement('div');
-            rightHandle.className = 'handle right';
+            const rightHandle = document.createElement("div");
+            rightHandle.className = "handle handle-right";
             el.appendChild(rightHandle);
-            
-            this.initializeDragHandlers(el, leftHandle, rightHandle);
-            
-            el.onclick = (e) => {
-                if (!e.target.classList.contains('handle')) {
+
+            el.title = `${this.getActionName(segment.action)}: ${segment.caption}`;
+
+            el.addEventListener("click", (e) => {
+                if (!e.target.classList.contains("handle")) {
                     this.editingSegmentIndex = index;
-                    this.showModal({
-                        startFrame: startTime * this.FPS,
-                        endFrame: endTime * this.FPS
-                    }, true);
+                    this.showModal(
+                        {
+                            startFrame: segment.start_frame,
+                            endFrame: segment.end_frame,
+                        },
+                        true
+                    );
                 }
-            };
-            
+            });
+
             this.timeline.appendChild(el);
         });
     }
 
-    initializeDragHandlers(segment, leftHandle, rightHandle) {
-        let isDragging = false;
-        let startX = 0;
-        let segmentLeft = 0;
-        let segmentWidth = 0;
-        
-        const startDrag = (e, isHandle, isLeft) => {
-            isDragging = true;
-            startX = e.clientX;
-            segmentLeft = parseFloat(segment.style.left);
-            segmentWidth = parseFloat(segment.style.width);
-            
-            document.addEventListener('mousemove', drag);
-            document.addEventListener('mouseup', stopDrag);
-            
-            e.preventDefault();
-            e.stopPropagation();
+    getActionName(action) {
+        const actions = {
+            0: "기타",
+            1: "접근",
+            2: "사용",
+            3: "종료"
         };
-        
-        const drag = (e) => {
-            if (!isDragging) return;
-            
-            const timeline = this.timeline.getBoundingClientRect();
-            const deltaX = ((e.clientX - startX) / timeline.width) * 100;
-            
-            if (e.target.classList.contains('handle')) {
-                if (e.target === leftHandle) {
-                    const newLeft = Math.max(0, segmentLeft + deltaX);
-                    const newWidth = Math.max(1, segmentWidth - deltaX);
-                    if (newLeft + newWidth <= 100) {
-                        segment.style.left = `${newLeft}%`;
-                        segment.style.width = `${newWidth}%`;
-                    }
-                } else {
-                    const newWidth = Math.max(1, segmentWidth + deltaX);
-                    if (segmentLeft + newWidth <= 100) {
-                        segment.style.width = `${newWidth}%`;
-                    }
-                }
-            } else {
-                const newLeft = Math.max(0, Math.min(100 - segmentWidth, segmentLeft + deltaX));
-                segment.style.left = `${newLeft}%`;
-            }
-         };
-         
-         const stopDrag = () => {
-            if (!isDragging) return;
-            isDragging = false;
-            
-            document.removeEventListener('mousemove', drag);
-            document.removeEventListener('mouseup', stopDrag);
-            
-            const index = parseInt(segment.dataset.index);
-            const video = document.getElementById('videoPlayer');
-            const totalFrames = Math.floor(video.duration * this.FPS);
-            
-            const left = parseFloat(segment.style.left);
-            const width = parseFloat(segment.style.width);
-            
-            const startFrame = Math.round((left / 100) * totalFrames);
-            const endFrame = Math.round(((left + width) / 100) * totalFrames);
-            
-            this.segments[index] = {
-                ...this.segments[index],
-                start_time: this.frameToTimestamp(startFrame),
-                end_time: this.frameToTimestamp(endFrame),
-                duration: (endFrame - startFrame) / this.FPS
-            };
-            
-            document.dispatchEvent(new CustomEvent('annotationModified'));
-            this.saveAnnotations();
-         };
-         
-         segment.addEventListener('mousedown', (e) => {
-            if (!e.target.classList.contains('handle')) {
-                startDrag(e, false);
-            }
-         });
-         
-         leftHandle.addEventListener('mousedown', (e) => startDrag(e, true, true));
-         rightHandle.addEventListener('mousedown', (e) => startDrag(e, true, false));
-         }
-         
-         getActionTypeText(action) {
-            const types = {
-                1: 'Observe',
-                2: 'Approach', 
-                3: 'Use',
-                4: 'Complete'
-            };
-            return types[action] || '';
-         }
-         
-         getAgeText(age) {
-            const ages = {1: '유소년', 2: '청중장년', 3: '노년'};
-            return ages[age] || '';
-         }
-         
-         getGenderText(gender) {
-            return gender === 1 ? '남성' : '여성';
-         }
-         
-         getDisabilityText(disability) {
-            return disability === 1 ? '유' : '무';
-         }
-         
-         clearSegments() {
-            while (this.timeline.firstChild) {
-                this.timeline.removeChild(this.timeline.firstChild);
-            }
-         }
-         
-         setRadioValue(name, value) {
-            document.querySelector(`input[name="${name}"][value="${value}"]`).checked = true;
-         }
-         
-         getRadioValue(name) {
-            const radios = document.getElementsByName(name);
-            for (const radio of radios) {
-                if (radio.checked) {
-                    return parseInt(radio.value);
-                }
-            }
-            return null;
-         }
-         
-         showTemporaryMarker(time) {
-            if (this.temporaryMarker) {
-                this.temporaryMarker.remove();
-            }
-         
-            const marker = document.createElement('div');
-            marker.className = 'temporary-marker';
-            const percentage = (time / videoController.video.duration) * 100;
-            marker.style.left = `${percentage}%`;
-            marker.style.display = 'block';  // 추가
-            this.timeline.appendChild(marker);
-            this.temporaryMarker = marker;
+        return actions[action] || "알 수 없음";
+    }
+
+    clearSegments() {
+        const segments = this.timeline.querySelectorAll(".segment");
+        segments.forEach((segment) => segment.remove());
+    }
+
+    loadAnnotations(annotations) {
+        if (!annotations?.segments) return;
+
+        this.isNewFile = false;
+        this.segments = annotations.segments;
+        this.renderSegments();
+
+        if (this.segments.length > 0) {
+            const lastSegment = this.segments[this.segments.length - 1];
+            this.lastEndTime = lastSegment.end_frame;
         }
-         }
-         
-         const timelineController = new TimelineController();
+    }
+
+    showTemporaryMarker(time) {
+        if (this.temporaryMarker) {
+            this.temporaryMarker.remove();
+        }
+
+        const marker = document.createElement("div");
+        marker.className = "temporary-marker";
+        const percentage = (time / videoController.video.duration) * 100;
+        marker.style.left = `${percentage}%`;
+        this.timeline.appendChild(marker);
+        this.temporaryMarker = marker;
+    }
+}
+
+const timelineController = new TimelineController();

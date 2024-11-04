@@ -3,7 +3,6 @@ class FileHandler {
         this.currentFiles = [];
         this.currentFileIndex = -1;
         this.hasModifiedContent = false;
-        this.currentAnnotationData = null;
         this.initializeElements();
         this.initializeEventListeners();
     }
@@ -15,34 +14,20 @@ class FileHandler {
         this.loadPathBtn = document.getElementById('loadPath');
         this.loadFilesBtn = document.getElementById('loadFiles');
         this.loadSingleFilesBtn = document.getElementById('loadSingleFiles');
-        this.saveSegmentBtn = document.getElementById('saveSegment');
+        this.fileList = document.getElementById('fileList');
         this.progressContainer = document.getElementById('progressContainer');
         this.progressBar = document.getElementById('progressBar');
-        this.completeButton = document.getElementById('completeButton');
-        this.updateSaveButtonState();
     }
 
     initializeEventListeners() {
         this.loadPathBtn.addEventListener('click', () => this.handlePathLoad());
-        this.loadFilesBtn.addEventListener('click', () => this.handleDirectoryLoad());
-        this.loadSingleFilesBtn.addEventListener('click', () => this.handleSingleFileLoad());
-        
-        this.directoryInput.addEventListener('change', (e) => this.handleDirectorySelect(e));
-        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        
-        this.saveSegmentBtn.addEventListener('click', async () => {
-            const annotations = timelineController.segments;
-            await this.saveAnnotations(annotations);
-        });
-
-        document.addEventListener('annotationModified', () => {
-            this.hasModifiedContent = true;
-            this.updateSaveButtonState();
-        });
-
         this.pathInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.handlePathLoad();
         });
+        this.loadFilesBtn.addEventListener('click', () => this.handleDirectoryLoad());
+        this.loadSingleFilesBtn.addEventListener('click', () => this.handleSingleFileLoad());
+        this.directoryInput.addEventListener('change', (e) => this.handleDirectorySelect(e));
+        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
     }
 
     async handlePathLoad() {
@@ -73,31 +58,20 @@ class FileHandler {
         }
     }
 
-    handleDirectoryLoad() {
-        this.directoryInput.click();
-    }
-
-    handleSingleFileLoad() {
-        this.fileInput.click();
-    }
-
-    handleDirectorySelect(event) {
+    async handleDirectorySelect(event) {
         const files = Array.from(event.target.files)
             .filter(file => file.type.startsWith('video/'));
-        this.processSelectedFiles(files);
+        await this.processSelectedFiles(files);
     }
 
-    handleFileSelect(event) {
+    async handleFileSelect(event) {
         const files = Array.from(event.target.files)
             .filter(file => file.type.startsWith('video/'));
-        this.processSelectedFiles(files);
+        await this.processSelectedFiles(files);
     }
 
     async processSelectedFiles(files) {
-        if (files.length === 0) {
-            alert('선택된 비디오 파일이 없습니다.');
-            return;
-        }
+        if (files.length === 0) return;
 
         try {
             this.showProgress();
@@ -120,6 +94,33 @@ class FileHandler {
         }
     }
 
+    async loadAnnotations(file) {
+        try {
+            if (!file.originalPath) {
+                throw new Error('파일 경로가 없습니다.');
+            }
+    
+            console.log("Loading annotations for:", file.originalPath);
+            const response = await fetch(`/api/annotations/${encodeURIComponent(file.originalPath)}`);
+            console.log("Load annotations response:", response);
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log("Loaded annotations:", data);
+                timelineController.loadAnnotations(data);
+                return data;
+            } else {
+                console.log("No existing annotations found");
+                timelineController.segments = [];
+                return null;
+            }
+        } catch (error) {
+            console.error('Error loading annotations:', error);
+            timelineController.segments = [];
+            return null;
+        }
+    }
+
     async loadVideo(index) {
         if (index === this.currentFileIndex) return;
 
@@ -127,7 +128,7 @@ class FileHandler {
             if (this.hasModifiedContent) {
                 const confirmSave = confirm('수정된 내용이 있습니다. 저장하시겠습니까?');
                 if (confirmSave) {
-                    await this.saveAnnotations(timelineController.segments);
+                    await timelineController.saveAnnotations();
                 }
             }
 
@@ -137,26 +138,80 @@ class FileHandler {
             
             timelineController.clearSegments();
             await videoController.loadVideo(file.path);
-            videoController.currentVideoPath = file.originalPath || file.path;
+            videoController.currentVideoPath = file.originalPath;
             
-            await this.loadAnnotations(index);
+            const hasAnnotation = await this.checkAnnotationExists(file.originalPath);
+            if (hasAnnotation) {
+                await this.loadAnnotations(file);
+                timelineController.isNewFile = false;
+            } else {
+                timelineController.isNewFile = true;
+                timelineController.segments = [];
+            }
+            
             await this.displayFileList();
-            
         } catch (error) {
             console.error('Error:', error);
             alert('비디오 로드 중 오류가 발생했습니다.');
         }
     }
 
+    async saveAnnotations(annotations, isComplete = false) {
+        const currentFile = this.getCurrentFile();
+        if (!currentFile) {
+            throw new Error('현재 선택된 파일이 없습니다.');
+        }
+
+        try {
+            console.log("Saving annotations for:", currentFile);
+            const originalPath = currentFile.originalPath || currentFile.path;
+            console.log("Original path:", originalPath);
+
+            const formData = new FormData();
+            const jsonBlob = new Blob([JSON.stringify(annotations, null, 2)], {
+                type: 'application/json'
+            });
+            
+            formData.append('file', jsonBlob, 'annotations.json');
+            formData.append('path', originalPath);
+
+            console.log("Sending annotation data:", annotations);
+
+            const saveResponse = await fetch('/api/save-annotation', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!saveResponse.ok) {
+                console.error('Save response not OK:', await saveResponse.text());
+                throw new Error('저장 실패');
+            }
+
+            const saveResult = await saveResponse.json();
+            console.log("Save result:", saveResult);
+
+            if (isComplete) {
+                alert('작성이 완료되었습니다.');
+            }
+
+            this.hasModifiedContent = false;
+            await this.displayFileList();
+            return saveResult;
+
+        } catch (error) {
+            console.error('Save error:', error);
+            throw error;
+        }
+    }
+
     async displayFileList() {
-        const fileList = document.getElementById('fileList');
-        fileList.innerHTML = '';
+        this.fileList.innerHTML = '';
         
-        for (const [index, file] of this.currentFiles.entries()) {
+        for (const file of this.currentFiles) {
             const hasAnnotation = await this.checkAnnotationExists(file.originalPath || file.path);
-            const isActive = index === this.currentFileIndex;
             
             const tr = document.createElement('tr');
+            const isActive = file === this.getCurrentFile();
             tr.className = isActive ? 'active' : '';
             
             tr.innerHTML = `
@@ -170,129 +225,68 @@ class FileHandler {
             `;
 
             if (!isActive) {
-                tr.querySelector('button').addEventListener('click', async () => {
-                    await this.loadVideo(index);
+                tr.querySelector('button').addEventListener('click', () => {
+                    const index = this.currentFiles.findIndex(f => f.name === file.name);
+                    if (index !== -1) {
+                        this.loadVideo(index);
+                    }
                 });
             }
 
-            fileList.appendChild(tr);
+            this.fileList.appendChild(tr);
         }
-    }
-
-    async loadAnnotations(index) {
-        try {
-            const file = this.currentFiles[index];
-            if (!file.originalPath && !file.path) return;
-            
-            const path = file.originalPath || file.path;
-            const response = await fetch(`/api/annotations/${encodeURIComponent(path)}`);
-            
-            if (response.ok) {
-                const data = await response.json();
-                this.currentAnnotationData = data;
-                timelineController.segments = data.segments || [];
-                timelineController.renderSegments();
-            }
-        } catch (error) {
-            console.error('Error:', error);
-        }
-    }
-
-    async saveAnnotations(segments) {
-        if (!this.currentFiles[this.currentFileIndex]) return;
-        
-        try {
-            const file = this.currentFiles[this.currentFileIndex];
-            const video = document.getElementById('videoPlayer');
-            
-            const data = {
-                info: {
-                    filename: file.originalPath || file.path,
-                    format: 'mp4',
-                    size: file.size || 0,
-                    width_height: [video.videoWidth, video.videoHeight],
-                    environment: 1,
-                    device: 'KIOSK',
-                    frame_rate: 15,
-                    playtime: video.duration,
-                    date: new Date().toISOString().split('T')[0]
-                },
-                // segments를 직접 배열로 전달
-                segments: Array.isArray(segments) ? segments : [],
-                additional_info: {
-                    InteractionType: 'Touchscreen'
-                }
-            };
-    
-            const response = await fetch(`/api/save-annotations/${encodeURIComponent(file.originalPath || file.path)}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-    
-            if (response.ok) {
-                this.hasModifiedContent = false;
-                this.updateSaveButtonState();
-                await this.loadAnnotations(this.currentFileIndex);
-                return true;
-            } else {
-                throw new Error('저장 실패');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('저장 중 오류가 발생했습니다.');
-            return false;
-        }
-    }
-
-    async handleComplete() {
-        try {
-            if (timelineController.segments.length === 0) {
-                alert('저장할 구간이 없습니다.');
-                return;
-            }
-    
-            if (confirm('작성을 완료하시겠습니까?')) {
-                await this.saveAnnotations(timelineController.segments);
-                alert('저장이 완료되었습니다.');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('저장 중 오류가 발생했습니다.');
-        }
-    }
-
-    async checkAnnotationExists(path) {
-        if (!path) return false;
-        try {
-            const response = await fetch(`/api/check-annotation?path=${encodeURIComponent(path)}`);
-            const data = await response.json();
-            return data.exists;
-        } catch {
-            return false;
-        }
-    }
-
-    updateSaveButtonState() {
-        const hasSegments = timelineController.segments.length > 0;
-        this.saveSegmentBtn.disabled = !hasSegments && !this.hasModifiedContent;
-    }
-
-    showProgress() {
-        this.progressContainer.style.display = 'block';
-        this.progressBar.style.width = '0%';
-    }
-
-    hideProgress() {
-        this.progressContainer.style.display = 'none';
     }
 
     removeDuplicates(files) {
         return Array.from(new Map(files.map(file => [file.name, file])).values());
     }
 
+    handleDirectoryLoad() {
+        this.directoryInput.click();
+    }
+
+    handleSingleFileLoad() {
+        this.fileInput.click();
+    }
+
     getCurrentFile() {
-        return this.currentFiles[this.currentFileIndex];
+        return this.currentFileIndex >= 0 ? this.currentFiles[this.currentFileIndex] : null;
+    }
+
+    async checkAnnotationExists(path) {
+        if (!path) return false;
+        try {
+            const response = await fetch(`/api/check-annotation?path=${encodeURIComponent(path)}`);
+            return response.ok;
+        } catch {
+            return false;
+        }
+    }
+
+    showProgress() {
+        this.progressContainer.style.display = 'block';
+        this.progressBar.style.width = '0%';
+        this.animateProgress();
+    }
+
+    hideProgress() {
+        this.progressBar.style.width = '100%';
+        setTimeout(() => {
+            this.progressContainer.style.display = 'none';
+            this.progressBar.style.width = '0%';
+        }, 200);
+    }
+
+    animateProgress() {
+        let width = 0;
+        const interval = setInterval(() => {
+            if (width >= 90) {
+                clearInterval(interval);
+            } else {
+                width += Math.random() * 10;
+                this.progressBar.style.width = `${Math.min(width, 90)}%`;
+            }
+        }, 200);
     }
 }
 
