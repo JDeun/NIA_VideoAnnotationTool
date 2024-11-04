@@ -6,7 +6,6 @@ import os
 import aiofiles
 from ..utils.file_handler import get_video_files, validate_video_file
 from config import ALLOWED_VIDEO_EXTENSIONS
-import aiofiles
 
 router = APIRouter(tags=["video"])
 
