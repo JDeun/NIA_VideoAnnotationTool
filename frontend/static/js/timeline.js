@@ -1,5 +1,6 @@
 class TimelineController {
     constructor() {
+        console.log("Initializing TimelineController");
         this.timeline = document.getElementById("timeline");
         this.modal = document.getElementById("segmentModal");
         this.modalTitle = document.getElementById("modalTitle");
@@ -203,6 +204,14 @@ class TimelineController {
         let startFrame = parseInt(this.startFrameInput.value);
         let endFrame = parseInt(this.endFrameInput.value);
 
+        console.log("Frame Input Change:", {
+            type,
+            before: { startFrame, endFrame },
+            totalFrames,
+            videoDuration: video.duration
+        });
+
+        // 유효성 검사
         startFrame = Math.max(0, Math.min(startFrame, totalFrames));
         endFrame = Math.max(0, Math.min(endFrame, totalFrames));
 
@@ -211,6 +220,10 @@ class TimelineController {
         } else if (type === "end" && endFrame <= startFrame) {
             endFrame = startFrame + 1;
         }
+
+        console.log("Frame Input After Validation:", {
+            after: { startFrame, endFrame }
+        });
 
         this.startFrameInput.value = startFrame;
         this.endFrameInput.value = endFrame;
@@ -222,6 +235,7 @@ class TimelineController {
     }
 
     markTimelinePoint() {
+        console.log("Timeline Point Marking Started");
         const video = document.getElementById("videoPlayer");
         videoController.pause();
 
@@ -231,6 +245,7 @@ class TimelineController {
         }
 
         const currentFrame = Math.floor(video.currentTime * 15);
+        console.log("Current Frame:", currentFrame);
 
         if (!this.currentSegment) {
             this.currentSegment = {
@@ -244,6 +259,11 @@ class TimelineController {
                 alert("종료 시점은 시작 시점보다 뒤여야 합니다.");
                 return;
             }
+            console.log("Ending segment", {
+                startFrame: this.currentSegment.startFrame,
+                endFrame: currentFrame
+            });
+
             this.showModal({
                 ...this.currentSegment,
                 endFrame: currentFrame,
@@ -316,6 +336,16 @@ class TimelineController {
     }
 
     async handleSegmentSave() {
+        console.log("Starting segment save process");
+        console.log("Current state:", {
+            selectedActionType: this.selectedActionType,
+            captionValue: this.captionInput.value,
+            startFrame: this.startFrameInput.value,
+            endFrame: this.endFrameInput.value,
+            isNewFile: this.isNewFile,
+            editingIndex: this.editingSegmentIndex
+        });
+
         if (!this.validateSegmentData()) {
             console.log("Validation failed, cannot save segment");
             return;
@@ -329,7 +359,7 @@ class TimelineController {
                 segment_id: this.editingSegmentIndex !== null ? this.editingSegmentIndex : this.segments.length,
                 start_frame: startFrame,
                 end_frame: endFrame,
-                duration: ((endFrame - startFrame) / 15).toFixed(6),
+                duration: (endFrame - startFrame).toFixed(6),
                 action: this.selectedActionType,
                 caption: this.captionInput.value.trim(),
                 age: this.isNewFile ? this.defaultValues.age : parseInt(this.getSelectedRadioValue('age')),
@@ -341,18 +371,29 @@ class TimelineController {
             console.log('Saving segment:', segment);
 
             if (this.editingSegmentIndex !== null) {
+                console.log(`Updating existing segment at index ${this.editingSegmentIndex}`);
                 this.segments[this.editingSegmentIndex] = segment;
             } else {
+                console.log('Adding new segment');
                 this.segments.push(segment);
                 this.lastEndTime = endFrame;
             }
 
+            console.log('Current segments array:', this.segments);
             await this.saveAnnotations();
+            console.log('Annotations saved successfully');
+            
             this.renderSegments();
             this.hideModal();
             fileHandler.hasModifiedContent = true;
+
         } catch (error) {
             console.error("세그먼트 저장 실패:", error);
+            console.error("Error details:", {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
             alert("저장 중 오류가 발생했습니다.");
         }
     }
@@ -535,15 +576,33 @@ class TimelineController {
     }
 
     loadAnnotations(annotations) {
-        if (!annotations?.segments) return;
+        console.log("Loading annotations:", annotations);
+        
+        if (!annotations?.segments) {
+            console.warn("No segments found in annotations");
+            return;
+        }
 
-        this.isNewFile = false;
-        this.segments = annotations.segments;
-        this.renderSegments();
+        try {
+            this.isNewFile = false;
+            this.segments = annotations.segments;
+            console.log("Loaded segments:", this.segments);
+            
+            this.renderSegments();
 
-        if (this.segments.length > 0) {
-            const lastSegment = this.segments[this.segments.length - 1];
-            this.lastEndTime = lastSegment.end_frame;
+
+            if (this.segments.length > 0) {
+                const lastSegment = this.segments[this.segments.length - 1];
+                this.lastEndTime = lastSegment.end_frame;
+                console.log("Last end time set to:", this.lastEndTime);
+            }
+        } catch (error) {
+            console.error("Error loading annotations:", error);
+            console.error("Error details:", {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
         }
     }
 

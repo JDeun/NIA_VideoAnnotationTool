@@ -122,7 +122,16 @@ class FileHandler {
     }
 
     async loadVideo(index) {
-        if (index === this.currentFileIndex) return;
+        console.log("Loading video:", {
+            index,
+            currentIndex: this.currentFileIndex,
+            hasModifiedContent: this.hasModifiedContent
+        });
+
+        if (index === this.currentFileIndex) {
+            console.log("Same video already loaded");
+            return;
+        }
 
         try {
             if (this.hasModifiedContent) {
@@ -133,6 +142,8 @@ class FileHandler {
             }
 
             const file = this.currentFiles[index];
+            console.log("Loading file:", file);
+
             this.currentFileIndex = index;
             this.hasModifiedContent = false;
             
@@ -141,6 +152,8 @@ class FileHandler {
             videoController.currentVideoPath = file.originalPath;
             
             const hasAnnotation = await this.checkAnnotationExists(file.originalPath);
+            console.log("Annotation exists:", hasAnnotation);
+
             if (hasAnnotation) {
                 await this.loadAnnotations(file);
                 timelineController.isNewFile = false;
@@ -151,7 +164,12 @@ class FileHandler {
             
             await this.displayFileList();
         } catch (error) {
-            console.error('Error:', error);
+            console.error("Error loading video:", error);
+            console.error("Error details:", {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
             alert('비디오 로드 중 오류가 발생했습니다.');
         }
     }
