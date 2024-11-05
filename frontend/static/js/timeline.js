@@ -240,22 +240,50 @@ class TimelineController {
         videoController.pause();
 
         if (!video.src) {
+            console.warn("No video loaded - cannot mark timeline point");
             alert("먼저 비디오를 로드해주세요.");
             return;
         }
 
-        const currentFrame = Math.floor(video.currentTime * 15);
-        console.log("Current Frame:", currentFrame);
+        const currentTime = video.currentTime;
+        const currentFrame = Math.floor(currentTime * 15);
+        
+        console.log("Marking timeline point:", {
+            currentTime,
+            currentFrame,
+            hasCurrentSegment: !!this.currentSegment,
+            lastEndTime: this.lastEndTime
+        });
 
         if (!this.currentSegment) {
+            const startFrame = this.lastEndTime ?? currentFrame;
+            console.log("Creating new segment:", {
+                startFrame,
+                currentFrame,
+                timeInSeconds: startFrame / 15
+            });
+
             this.currentSegment = {
-                startFrame: this.lastEndTime ?? currentFrame,
+            startFrame: startFrame,
             };
+
+            // 시작 지점 마커 표시 전 검증
+            if (startFrame >= 0 && startFrame <= video.duration * 15) {
+                this.showTemporaryMarker(startFrame / 15);
+            } else {
+                console.error("Invalid start frame:", startFrame);
+                return;
+            }
+
             this.showTemporaryMarker((this.currentSegment.startFrame / 15));
             this.markPointBtn.textContent = "구간 종료";
             this.markPointBtn.classList.add("active");
         } else {
             if (currentFrame <= this.currentSegment.startFrame) {
+                console.warn("End point before start point:", {
+                    currentFrame,
+                    startFrame: this.currentSegment.startFrame
+                });
                 alert("종료 시점은 시작 시점보다 뒤여야 합니다.");
                 return;
             }
@@ -607,13 +635,31 @@ class TimelineController {
     }
 
     showTemporaryMarker(time) {
+        console.log("Showing temporary marker:", {
+            time,
+            videoDuration: videoController.video.duration
+        });
+            
         if (this.temporaryMarker) {
+            console.log("Removing existing temporary marker");
             this.temporaryMarker.remove();
+        }
+
+        // 시간 값 검증
+        if (time < 0 || time > videoController.video.duration) {
+            console.error("Invalid marker time:", time);
+            return;
         }
 
         const marker = document.createElement("div");
         marker.className = "temporary-marker";
         const percentage = (time / videoController.video.duration) * 100;
+
+        console.log("Setting temporary marker position:", {
+            percentage,
+            calculatedLeft: `${percentage}%`
+        });
+        
         marker.style.left = `${percentage}%`;
         this.timeline.appendChild(marker);
         this.temporaryMarker = marker;

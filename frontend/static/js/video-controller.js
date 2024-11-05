@@ -183,11 +183,28 @@ class VideoController {
     }
  
     updateTimelineMarker() {
-        if (!this.video.src) return;
-        
-        const percentage = (this.video.currentTime / this.video.duration) * 100;
+        if (!this.video.src) {
+            console.log("Timeline marker update skipped - no video source");
+            return;
+        }
+        const currentTime = this.video.currentTime;
+        const duration = this.video.duration;
+        const percentage = (currentTime / duration) * 100;
+    
+    console.log("Updating timeline marker:", {
+        currentTime,
+        duration,
+        percentage,
+        markerElement: this.timelineMarker,
+        markerVisible: this.timelineMarker.style.display !== 'none'
+    });
+
+    // 마커가 사라지는 것을 방지하기 위한 검증
+    if (!this.timelineMarker.style.left || percentage !== parseFloat(this.timelineMarker.style.left)) {
+        this.timelineMarker.style.display = 'block';  // 마커 표시 상태 유지
         this.timelineMarker.style.left = `${percentage}%`;
     }
+}
  
     handleKeyPress(e) {
         if (!this.controlsEnabled || !this.video.src) {
