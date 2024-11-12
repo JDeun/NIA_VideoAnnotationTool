@@ -304,8 +304,8 @@ def validate_segment(segment: Dict):
 
    # 프레임 검증
    try:
-       start_frame = float(segment['start_frame'])
-       end_frame = float(segment['end_frame'])
+       start_frame = int(segment['start_frame'])
+       end_frame = int(segment['end_frame'])
        if start_frame >= end_frame:
            raise ValueError("start_frame must be less than end_time")
    except ValueError:
@@ -313,7 +313,7 @@ def validate_segment(segment: Dict):
 
    # duration 검증
    try:
-        duration = float(segment['duration'])
+        duration = int(segment['duration'])
         if duration <= 0:
             logger.error(f"Invalid duration: {duration}")
             raise ValueError("Duration must be positive")

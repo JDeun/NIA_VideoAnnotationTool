@@ -20,7 +20,8 @@ class TimelineController {
         this.segments = [];
         this.currentSegment = null;
         this.selectedActionType = null;
-        this.lastEndTime = null;
+        // 수정: lastEndTime 초기화 값 설정
+        this.lastEndTime = 0;
         this.temporaryMarker = null;
         this.editingSegmentIndex = null;
         this.isDragging = false;
@@ -29,6 +30,12 @@ class TimelineController {
         this.originalStartFrame = 0;
         this.originalEndFrame = 0;
         this.dragType = null;
+
+        // 추가: 프레임 관련 상수
+        this.FPS = 15;
+        this.FRAME_TIME = 1 / this.FPS;
+        // 추가: 최소 구간 길이 제한
+        this.MINIMUM_SEGMENT_FRAMES = 1; // 최소 1프레임
 
         // 신규 생성 시 사용할 기본값
         this.defaultValues = {
@@ -39,6 +46,9 @@ class TimelineController {
 
         // 신규/수정 모드 구분
         this.isNewFile = true;
+
+        // 추가: 현재 상태 추적
+        this.isMarkingSegment = false;
 
         this.initializeEventListeners();
     }
@@ -117,108 +127,110 @@ class TimelineController {
         this.timeline.addEventListener("mousedown", (e) => this.handleTimelineMouseDown(e));
         document.addEventListener("mousemove", (e) => this.handleTimelineMouseMove(e));
         document.addEventListener("mouseup", () => this.handleTimelineMouseUp());
-    }
-
-    handleTimelineMouseDown(e) {
-        const segment = e.target.closest(".segment");
-        if (!segment) return;
-
-        this.isDragging = true;
-        this.draggedSegment = segment;
-        this.dragStartX = e.clientX;
-        const index = parseInt(segment.dataset.index);
-        const segmentData = this.segments[index];
-
-        if (e.target.classList.contains("handle-left")) {
-            this.dragType = "left";
-        } else if (e.target.classList.contains("handle-right")) {
-            this.dragType = "right";
-        } else {
-            this.dragType = "move";
         }
 
-        this.originalStartFrame = segmentData.start_frame;
-        this.originalEndFrame = segmentData.end_frame;
-
-        e.preventDefault();
-    }
-
-    handleTimelineMouseMove(e) {
-        if (!this.isDragging) return;
-
-        const timelineRect = this.timeline.getBoundingClientRect();
-        const video = document.getElementById("videoPlayer");
-        const totalFrames = video.duration * 15;
-        const pixelsPerFrame = timelineRect.width / totalFrames;
-        const framesDelta = Math.round((e.clientX - this.dragStartX) / pixelsPerFrame);
-
-        const index = parseInt(this.draggedSegment.dataset.index);
-        const segment = this.segments[index];
-
-        switch (this.dragType) {
-            case "left":
-                const newStartFrame = Math.max(0, this.originalStartFrame + framesDelta);
-                if (newStartFrame < segment.end_frame) {
-                    segment.start_frame = newStartFrame;
-                    segment.duration = (segment.end_frame - newStartFrame) / 15;
-                }
-                break;
-
-            case "right":
-                const newEndFrame = Math.min(totalFrames, this.originalEndFrame + framesDelta);
-                if (newEndFrame > segment.start_frame) {
-                    segment.end_frame = newEndFrame;
-                    segment.duration = (newEndFrame - segment.start_frame) / 15;
-                }
-                break;
-
-            case "move":
-                const minFrame = Math.max(0, this.originalStartFrame + framesDelta);
-                const maxFrame = Math.min(totalFrames, this.originalEndFrame + framesDelta);
-                const duration = this.originalEndFrame - this.originalStartFrame;
-
-                if (minFrame >= 0 && maxFrame <= totalFrames) {
-                    segment.start_frame = minFrame;
-                    segment.end_frame = maxFrame;
-                    segment.duration = duration / 15;
-                }
-                break;
+        handleTimelineMouseDown(e) {
+            const segment = e.target.closest(".segment");
+            if (!segment) return;
+    
+            this.isDragging = true;
+            this.draggedSegment = segment;
+            this.dragStartX = e.clientX;
+            const index = parseInt(segment.dataset.index);
+            const segmentData = this.segments[index];
+    
+            if (e.target.classList.contains("handle-left")) {
+                this.dragType = "left";
+            } else if (e.target.classList.contains("handle-right")) {
+                this.dragType = "right";
+            } else {
+                this.dragType = "move";
+            }
+    
+            this.originalStartFrame = segmentData.start_frame;
+            this.originalEndFrame = segmentData.end_frame;
+    
+            e.preventDefault();
         }
 
-        this.renderSegments();
-        fileHandler.hasModifiedContent = true;
-    }
-
-    handleTimelineMouseUp() {
-        if (this.isDragging) {
-            this.isDragging = false;
-            this.draggedSegment = null;
-            this.saveAnnotations();
+        handleTimelineMouseMove(e) {
+            if (!this.isDragging) return;
+    
+            const timelineRect = this.timeline.getBoundingClientRect();
+            const video = document.getElementById("videoPlayer");
+            // 수정: 프레임 계산 정확도 향상
+            const totalFrames = Math.round(video.duration * this.FPS);
+            const pixelsPerFrame = timelineRect.width / totalFrames;
+            const framesDelta = Math.round((e.clientX - this.dragStartX) / pixelsPerFrame);
+    
+            const index = parseInt(this.draggedSegment.dataset.index);
+            const segment = this.segments[index];
+    
+            switch (this.dragType) {
+                case "left":
+                    const newStartFrame = Math.max(0, this.originalStartFrame + framesDelta);
+                    if (newStartFrame < segment.end_frame - this.MINIMUM_SEGMENT_FRAMES) {
+                        segment.start_frame = newStartFrame;
+                        segment.duration = (segment.end_frame - newStartFrame) / this.FPS;
+                    }
+                    break;
+    
+                case "right":
+                    const newEndFrame = Math.min(totalFrames, this.originalEndFrame + framesDelta);
+                    if (newEndFrame > segment.start_frame + this.MINIMUM_SEGMENT_FRAMES) {
+                        segment.end_frame = newEndFrame;
+                        segment.duration = (newEndFrame - segment.start_frame) / this.FPS;
+                    }
+                    break;
+    
+                case "move":
+                    const minFrame = Math.max(0, this.originalStartFrame + framesDelta);
+                    const maxFrame = Math.min(totalFrames, this.originalEndFrame + framesDelta);
+                    const duration = this.originalEndFrame - this.originalStartFrame;
+    
+                    if (minFrame >= 0 && maxFrame <= totalFrames) {
+                        segment.start_frame = minFrame;
+                        segment.end_frame = maxFrame;
+                        segment.duration = duration / this.FPS;
+                    }
+                    break;
+            }
+    
+            this.renderSegments();
+            fileHandler.hasModifiedContent = true;
         }
-    }
 
-    handleFrameInputChange(type) {
-        const video = document.getElementById("videoPlayer");
-        const totalFrames = Math.floor(video.duration * 15);
+        handleTimelineMouseUp() {
+            if (this.isDragging) {
+                this.isDragging = false;
+                this.draggedSegment = null;
+                this.saveAnnotations();
+            }
+        }
+    
+        handleFrameInputChange(type) {
+            const video = document.getElementById("videoPlayer");
+            // 수정: 프레임 계산 정확도 향상
+            const totalFrames = Math.round(video.duration * this.FPS);
+    
+            let startFrame = parseInt(this.startFrameInput.value);
+            let endFrame = parseInt(this.endFrameInput.value);
+    
+            console.log("Frame Input Change:", {
+                type,
+                before: { startFrame, endFrame },
+                totalFrames,
+                videoDuration: video.duration
+            });
 
-        let startFrame = parseInt(this.startFrameInput.value);
-        let endFrame = parseInt(this.endFrameInput.value);
-
-        console.log("Frame Input Change:", {
-            type,
-            before: { startFrame, endFrame },
-            totalFrames,
-            videoDuration: video.duration
-        });
-
-        // 유효성 검사
+        // 수정: 프레임 유효성 검사 강화
         startFrame = Math.max(0, Math.min(startFrame, totalFrames));
         endFrame = Math.max(0, Math.min(endFrame, totalFrames));
 
-        if (type === "start" && startFrame >= endFrame) {
-            startFrame = endFrame - 1;
-        } else if (type === "end" && endFrame <= startFrame) {
-            endFrame = startFrame + 1;
+        if (type === "start" && startFrame >= endFrame - this.MINIMUM_SEGMENT_FRAMES) {
+            startFrame = endFrame - this.MINIMUM_SEGMENT_FRAMES;
+        } else if (type === "end" && endFrame <= startFrame + this.MINIMUM_SEGMENT_FRAMES) {
+            endFrame = startFrame + this.MINIMUM_SEGMENT_FRAMES;
         }
 
         console.log("Frame Input After Validation:", {
@@ -234,6 +246,7 @@ class TimelineController {
         }
     }
 
+    // 수정: 구간 표시 기능 개선
     markTimelinePoint() {
         console.log("Timeline Point Marking Started");
         const video = document.getElementById("videoPlayer");
@@ -246,7 +259,8 @@ class TimelineController {
         }
 
         const currentTime = video.currentTime;
-        const currentFrame = Math.floor(currentTime * 15);
+        // 수정: 프레임 계산 정확도 향상
+        const currentFrame = Math.round(currentTime * this.FPS);
         
         console.log("Marking timeline point:", {
             currentTime,
@@ -256,28 +270,29 @@ class TimelineController {
         });
 
         if (!this.currentSegment) {
-            const startFrame = this.lastEndTime ?? currentFrame;
+            // 수정: 시작 프레임 결정 로직 개선
+            let startFrame = this.lastEndTime !== null && this.lastEndTime > currentFrame 
+                ? this.lastEndTime 
+                : currentFrame;
+
             console.log("Creating new segment:", {
                 startFrame,
                 currentFrame,
-                timeInSeconds: startFrame / 15
+                timeInSeconds: startFrame / this.FPS
             });
 
-            this.currentSegment = {
-            startFrame: startFrame,
-            };
-
-            // 시작 지점 마커 표시 전 검증
-            if (startFrame >= 0 && startFrame <= video.duration * 15) {
-                this.showTemporaryMarker(startFrame / 15);
+            // 수정: 시작 지점 유효성 검사 추가
+            if (startFrame >= 0 && startFrame <= video.duration * this.FPS) {
+                this.currentSegment = { startFrame };
+                this.showTemporaryMarker(startFrame / this.FPS);
+                this.markPointBtn.textContent = "구간 종료";
+                this.markPointBtn.classList.add("active");
+                this.isMarkingSegment = true;
             } else {
                 console.error("Invalid start frame:", startFrame);
+                alert("유효하지 않은 시작 지점입니다.");
                 return;
             }
-
-            this.showTemporaryMarker((this.currentSegment.startFrame / 15));
-            this.markPointBtn.textContent = "구간 종료";
-            this.markPointBtn.classList.add("active");
         } else {
             if (currentFrame <= this.currentSegment.startFrame) {
                 console.warn("End point before start point:", {
@@ -287,6 +302,13 @@ class TimelineController {
                 alert("종료 시점은 시작 시점보다 뒤여야 합니다.");
                 return;
             }
+
+            // 수정: 최소 구간 길이 검사 추가
+            if (currentFrame - this.currentSegment.startFrame < this.MINIMUM_SEGMENT_FRAMES) {
+                alert("구간이 너무 짧습니다. 더 길게 입력하세요.");
+                return;
+            }
+
             console.log("Ending segment", {
                 startFrame: this.currentSegment.startFrame,
                 endFrame: currentFrame
@@ -298,6 +320,7 @@ class TimelineController {
             });
             this.markPointBtn.textContent = "구간 표시";
             this.markPointBtn.classList.remove("active");
+            this.isMarkingSegment = false;
         }
     }
 
@@ -380,14 +403,16 @@ class TimelineController {
         }
 
         try {
-            const startFrame = parseInt(this.startFrameInput.value);
-            const endFrame = parseInt(this.endFrameInput.value);
+            // 수정: 프레임 값 검증 및 변환 개선
+            const startFrame = Math.round(parseInt(this.startFrameInput.value));
+            const endFrame = Math.round(parseInt(this.endFrameInput.value));
 
+            // 수정: 세그먼트 데이터 구조 개선
             const segment = {
                 segment_id: this.editingSegmentIndex !== null ? this.editingSegmentIndex : this.segments.length,
                 start_frame: startFrame,
                 end_frame: endFrame,
-                duration: (endFrame - startFrame).toFixed(6),
+                duration: ((endFrame - startFrame) / this.FPS).toFixed(6),
                 action: this.selectedActionType,
                 caption: this.captionInput.value.trim(),
                 age: this.isNewFile ? this.defaultValues.age : parseInt(this.getSelectedRadioValue('age')),
@@ -404,6 +429,7 @@ class TimelineController {
             } else {
                 console.log('Adding new segment');
                 this.segments.push(segment);
+                // 수정: lastEndTime 업데이트 로직 개선
                 this.lastEndTime = endFrame;
             }
 
@@ -466,14 +492,15 @@ class TimelineController {
                     width_height: [0, 0],
                     environment: 1,
                     device: "KIOSK",
-                    frame_rate: 15,
+                    frame_rate: this.FPS,
                     playtime: videoController.video.duration,
                     date: new Date().toISOString().split('T')[0]
                 },
                 segments: this.segments.map(segment => ({
                     ...segment,
-                    start_frame: parseInt(segment.start_frame),
-                    end_frame: parseInt(segment.end_frame),
+                    // 수정: 프레임 값 변환 정확도 향상
+                    start_frame: Math.round(segment.start_frame),
+                    end_frame: Math.round(segment.end_frame),
                     action: parseInt(segment.action),
                     age: parseInt(segment.age),
                     gender: parseInt(segment.gender),
@@ -535,26 +562,29 @@ class TimelineController {
         return isValid;
     }
 
+    // 수정: 세그먼트 렌더링 정확도 향상
     renderSegments() {
         this.clearSegments();
 
         const colors = {
             0: "#9E9E9E", // 기타: 회색
-            1: "#2196F3", // 접근: 파란색
+            1: "#2196F3", // 탐색: 파란색
             2: "#4CAF50", // 사용: 초록색
             3: "#F44336"  // 종료: 빨간색
         };
 
         const video = document.getElementById("videoPlayer");
-        const totalFrames = video.duration * 15;
+        // 수정: 전체 프레임 수 계산 정확도 향상
+        const totalFrames = Math.round(video.duration * this.FPS);
 
         this.segments.forEach((segment, index) => {
+            // 수정: 위치 계산 정확도 향상
+            const startPct = Math.max(0, Math.min(100, (segment.start_frame / totalFrames) * 100));
+            const endPct = Math.max(0, Math.min(100, (segment.end_frame / totalFrames) * 100));
+
             const el = document.createElement("div");
             el.className = "segment";
             el.dataset.index = index;
-
-            const startPct = (segment.start_frame / totalFrames) * 100;
-            const endPct = (segment.end_frame / totalFrames) * 100;
 
             el.style.left = `${startPct}%`;
             el.style.width = `${endPct - startPct}%`;
@@ -591,7 +621,7 @@ class TimelineController {
     getActionName(action) {
         const actions = {
             0: "기타",
-            1: "접근",
+            1: "탐색",
             2: "사용",
             3: "종료"
         };
@@ -621,7 +651,8 @@ class TimelineController {
 
             if (this.segments.length > 0) {
                 const lastSegment = this.segments[this.segments.length - 1];
-                this.lastEndTime = lastSegment.end_frame;
+                // 수정: lastEndTime 설정 정확도 향상
+                this.lastEndTime = Math.round(lastSegment.end_frame);
                 console.log("Last end time set to:", this.lastEndTime);
             }
         } catch (error) {
@@ -634,6 +665,7 @@ class TimelineController {
         }
     }
 
+    // 수정: 임시 마커 표시 기능 개선
     showTemporaryMarker(time) {
         console.log("Showing temporary marker:", {
             time,
@@ -645,15 +677,17 @@ class TimelineController {
             this.temporaryMarker.remove();
         }
 
-        // 시간 값 검증
-        if (time < 0 || time > videoController.video.duration) {
+        const video = videoController.video;
+        // 수정: 시간 값 검증 강화
+        if (time < 0 || time > video.duration) {
             console.error("Invalid marker time:", time);
             return;
         }
 
         const marker = document.createElement("div");
         marker.className = "temporary-marker";
-        const percentage = (time / videoController.video.duration) * 100;
+        // 수정: 위치 계산 정확도 향상
+        const percentage = Math.max(0, Math.min(100, (time / video.duration) * 100));
 
         console.log("Setting temporary marker position:", {
             percentage,

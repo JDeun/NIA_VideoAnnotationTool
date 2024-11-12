@@ -97,7 +97,7 @@ video {
 .time-display {
     text-align: right;
     padding: 0.25rem;
-    font-size: 0.85rem;
+    font-size: 1rem;
     display: flex;
     align-items: center;
     justify-content: flex-end;
