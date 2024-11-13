@@ -266,7 +266,9 @@ class TimelineController {
             currentTime,
             currentFrame,
             hasCurrentSegment: !!this.currentSegment,
-            lastEndTime: this.lastEndTime
+            lastEndTime: this.lastEndTime,
+            videoDuration: video.duration,
+            totalFrames: Math.round(video.duration * this.FPS)
         });
 
         if (!this.currentSegment) {
@@ -312,6 +314,21 @@ class TimelineController {
             console.log("Ending segment", {
                 startFrame: this.currentSegment.startFrame,
                 endFrame: currentFrame
+            });
+
+            // 시작 프레임 유효성 검사 강화
+            const totalFrames = Math.round(video.duration * this.FPS);
+            if (startFrame < 0) {
+                startFrame = 0;
+            } else if (startFrame >= totalFrames) {
+                startFrame = totalFrames - 1;
+            }
+
+            console.log("Creating new segment:", {
+                startFrame,
+                currentFrame,
+                timeInSeconds: startFrame / this.FPS,
+                totalFrames: totalFrames
             });
 
             this.showModal({
@@ -582,6 +599,7 @@ class TimelineController {
             const startPct = Math.max(0, Math.min(100, (segment.start_frame / totalFrames) * 100));
             const endPct = Math.max(0, Math.min(100, (segment.end_frame / totalFrames) * 100));
 
+            // 세그먼트 요소 생성
             const el = document.createElement("div");
             el.className = "segment";
             el.dataset.index = index;
@@ -591,6 +609,7 @@ class TimelineController {
             el.style.backgroundColor = colors[segment.action];
             el.style.top = `${(index % 3) * 16}px`;
 
+            // 핸들 생성
             const leftHandle = document.createElement("div");
             leftHandle.className = "handle handle-left";
             el.appendChild(leftHandle);
@@ -601,6 +620,7 @@ class TimelineController {
 
             el.title = `${this.getActionName(segment.action)}: ${segment.caption}`;
 
+            // 세그먼트 클릭 이벤트
             el.addEventListener("click", (e) => {
                 if (!e.target.classList.contains("handle")) {
                     this.editingSegmentIndex = index;
@@ -614,9 +634,30 @@ class TimelineController {
                 }
             });
 
-            this.timeline.appendChild(el);
+            // 시작 지점 마커 화살표 생성
+        const marker = document.createElement("div");
+        marker.className = "segment-marker";
+        marker.dataset.action = segment.action;
+        marker.dataset.segmentIndex = index;
+        marker.style.left = `${startPct}%`;
+        
+        // 마커 클릭 이벤트
+        marker.addEventListener("click", (e) => {
+            e.stopPropagation(); // 세그먼트 클릭 이벤트와 중복 방지
+            
+            // 비디오 시간 이동
+            const startTime = segment.start_frame / this.FPS;
+            videoController.video.currentTime = startTime;
+            videoController.pause();
+            videoController.updateTimeDisplay();
+            videoController.updateTimelineMarker();
         });
-    }
+
+        // 타임라인에 요소 추가
+        this.timeline.appendChild(el);
+        this.timeline.appendChild(marker);
+    });
+}
 
     getActionName(action) {
         const actions = {
@@ -629,8 +670,8 @@ class TimelineController {
     }
 
     clearSegments() {
-        const segments = this.timeline.querySelectorAll(".segment");
-        segments.forEach((segment) => segment.remove());
+        const segments = this.timeline.querySelectorAll(".segment, .segment-marker");
+        segments.forEach((element) => element.remove());
     }
 
     loadAnnotations(annotations) {

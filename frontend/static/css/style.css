@@ -538,3 +538,29 @@ tr.active {
 ::-webkit-scrollbar-thumb:hover {
     background: #666;
 }
+
+/* 화살표에 대한 추가된 내용*/
+/* 화살표 */
+.segment-marker {
+    position: absolute;
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #000;
+    bottom: 100%;  /* 타임라인 영역 바로 위에 위치 */
+    transform: translateX(-50%);  /* 화살표 중앙 정렬 */
+    cursor: pointer;
+    z-index: 10;
+}
+
+/* 각 액션 타입별 화살표 색상 */
+.segment-marker[data-action="0"] { border-top-color: #9E9E9E; }
+.segment-marker[data-action="1"] { border-top-color: #2196F3; }
+.segment-marker[data-action="2"] { border-top-color: #4CAF50; }
+.segment-marker[data-action="3"] { border-top-color: #F44336; }
+
+.segment-marker:hover {
+    transform: translateX(-50%) scale(1.2);
+    transition: transform 0.2s ease;
+}
