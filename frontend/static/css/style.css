@@ -3,6 +3,7 @@
     --tinder-secondary: #424242;
     --tinder-light: #ffffff;
     --tinder-gray: #f6f7f8;
+    --tinder-highlight: #ffe4eb;
     --tinder-text: #424242;
     --tinder-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     --border-radius: 6px;
@@ -262,7 +263,7 @@ td {
 }
 
 tr.active {
-    background-color: var(--tinder-gray);
+    background-color: var(--tinder-highlight);
 }
 
 /* 모달 */
