@@ -10,23 +10,17 @@ class TimelineController {
         this.cancelSegmentBtn = document.getElementById("cancelSegment");
         this.completeButton = document.getElementById("completeButton");
         this.markPointBtn = document.getElementById("markPoint");
+        this.captionInput = document.getElementById("captionInput");
         this.startFrameInput = document.getElementById("startFrame");
         this.endFrameInput = document.getElementById("endFrame");
-        this.userNumInput = document.getElementById("userNum");  // 새로 추가된 부분
+        this.ageInputs = document.getElementsByName("age");
+        this.genderInputs = document.getElementsByName("gender");
+        this.disabilityInputs = document.getElementsByName("disability");
 
-        // userNumInput 초기화 확인을 위한 로그 추가
-        console.log("userNumInput element:", this.userNumInput);
-
-        // 삭제된 입력 필드들
-        // this.captionInput = document.getElementById("captionInput");
-        // this.ageInputs = document.getElementsByName("age");
-        // this.genderInputs = document.getElementsByName("gender");
-        // this.disabilityInputs = document.getElementsByName("disability");
-     
-        // 타임라인 상태 관리 변수들
         this.segments = [];
         this.currentSegment = null;
         this.selectedActionType = null;
+        // 수정: lastEndTime 초기화 값 설정
         this.lastEndTime = 0;
         this.temporaryMarker = null;
         this.editingSegmentIndex = null;
@@ -36,32 +30,28 @@ class TimelineController {
         this.originalStartFrame = 0;
         this.originalEndFrame = 0;
         this.dragType = null;
-     
-        // 프레임 관련 상수
+
+        // 추가: 프레임 관련 상수
         this.FPS = 15;
         this.FRAME_TIME = 1 / this.FPS;
-        this.MINIMUM_SEGMENT_FRAMES = 1;
-     
-        // 삭제된 기본값들
-        // this.defaultValues = {
-        //     age: null,
-        //     gender: null,
-        //     disability: null
-        // };
-        
-        // 새로운 기본값
+        // 추가: 최소 구간 길이 제한
+        this.MINIMUM_SEGMENT_FRAMES = 1; // 최소 1프레임
+
+        // 신규 생성 시 사용할 기본값
         this.defaultValues = {
-            user_num: 1
+            age: null,
+            gender: null,
+            disability: null
         };
-     
+
         // 신규/수정 모드 구분
         this.isNewFile = true;
-     
-        // 현재 상태 추적
+
+        // 추가: 현재 상태 추적
         this.isMarkingSegment = false;
-     
+
         this.initializeEventListeners();
-     }
+    }
 
     initializeEventListeners() {
         // 액션 타입 버튼 이벤트
@@ -74,9 +64,37 @@ class TimelineController {
             });
         });
 
-        // user_num 입력 이벤트 추가
-        this.userNumInput.addEventListener('input', () => {
+        // 캡션 입력 이벤트 추가
+        this.captionInput.addEventListener('input', () => {
             this.validateSegmentData();
+        });
+
+        // 속성 라디오 버튼 이벤트
+        this.ageInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if(this.isNewFile) {
+                    this.defaultValues.age = parseInt(input.value);
+                }
+                this.validateSegmentData();
+            });
+        });
+
+        this.genderInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if(this.isNewFile) {
+                    this.defaultValues.gender = parseInt(input.value);
+                }
+                this.validateSegmentData();
+            });
+        });
+
+        this.disabilityInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if(this.isNewFile) {
+                    this.defaultValues.disability = parseInt(input.value);
+                }
+                this.validateSegmentData();
+            });
         });
 
         // 프레임 입력 이벤트
@@ -324,111 +342,122 @@ class TimelineController {
     }
 
     showModal(segment, isEdit = false) {
-    this.modal.style.display = "block";
-    this.tempSegment = segment;
-    this.modalTitle.textContent = isEdit ? "구간 정보 수정" : "구간 정보 입력";
+        videoController.pause();
+        videoController.disableControls();
 
-    this.startFrameInput.value = segment.startFrame;
-    this.endFrameInput.value = segment.endFrame;
+        this.modal.style.display = "block";
+        this.tempSegment = segment;
+        this.modalTitle.textContent = isEdit ? "구간 정보 수정" : "구간 정보 입력";
 
-    if (isEdit) {
-        this.deleteSegmentBtn.style.display = "block";
-        const segmentData = this.segments[this.editingSegmentIndex];
-        this.selectedActionType = segmentData.action;
-        
-        // user_num 값 설정 부분에 null 체크 추가
-        if (this.userNumInput) {
-            this.userNumInput.value = this.defaultValues.user_num;
+        this.startFrameInput.value = segment.startFrame;
+        this.endFrameInput.value = segment.endFrame;
+
+        if (isEdit) {
+            this.deleteSegmentBtn.style.display = "block";
+            const segmentData = this.segments[this.editingSegmentIndex];
+            this.selectedActionType = segmentData.action;
+            this.captionInput.value = segmentData.caption;
+
+            this.setRadioValue('age', segmentData.age);
+            this.setRadioValue('gender', segmentData.gender);
+            this.setRadioValue('disability', segmentData.disability);
+
+            this.actionButtons.forEach((btn) => {
+                if (parseInt(btn.dataset.action) === segmentData.action) {
+                    btn.classList.add("active");
+                } else {
+                    btn.classList.remove("active");
+                }
+            });
+        } else {
+            this.deleteSegmentBtn.style.display = "none";
+            this.actionButtons.forEach((btn) => btn.classList.remove("disabled"));
+            this.selectedActionType = null;
+            this.captionInput.value = "";
+
+            if (this.isNewFile) {
+                this.setRadioValue('age', this.defaultValues.age);
+                this.setRadioValue('gender', this.defaultValues.gender);
+                this.setRadioValue('disability', this.defaultValues.disability);
+            }
         }
 
-        this.actionButtons.forEach((btn) => {
-            btn.classList.toggle('active', parseInt(btn.dataset.action) === segmentData.action);
-        });
-    } else {
-        this.deleteSegmentBtn.style.display = "none";
-        this.actionButtons.forEach((btn) => btn.classList.remove("active"));
+        this.validateSegmentData();
+    }
+
+    hideModal() {
+        this.modal.style.display = "none";
+        this.currentSegment = null;
         this.selectedActionType = null;
-        
-        // user_num 값 설정 부분에 null 체크 추가
-        if (this.userNumInput) {
-            this.userNumInput.value = this.defaultValues.user_num;
+        this.editingSegmentIndex = null;
+        this.captionInput.value = "";
+
+        videoController.enableControls();
+
+        if (this.temporaryMarker) {
+            this.temporaryMarker.remove();
+            this.temporaryMarker = null;
         }
+
+        this.markPointBtn.textContent = "구간 표시";
+        this.markPointBtn.classList.remove("active");
     }
-
-    this.validateSegmentData();
-}
-
-
-hideModal() {
-    this.modal.style.display = "none";
-    this.currentSegment = null;
-    this.selectedActionType = null;
-    this.editingSegmentIndex = null;
-    
-    // userNumInput 값 초기화 부분에 null 체크 추가
-    if (this.userNumInput) {
-        this.userNumInput.value = "1";  // 기본값으로 설정
-    }
-
-    videoController.enableControls();
-
-    if (this.temporaryMarker) {
-        this.temporaryMarker.remove();
-        this.temporaryMarker = null;
-    }
-
-    this.markPointBtn.textContent = "구간 표시";
-    this.markPointBtn.classList.remove("active");
-}
 
     async handleSegmentSave() {
         console.log("Starting segment save process");
         console.log("Current state:", {
             selectedActionType: this.selectedActionType,
-            startFrame: this.startFrameInput?.value,
-            endFrame: this.endFrameInput?.value,
-            userNumInput: this.userNumInput,
+            captionValue: this.captionInput.value,
+            startFrame: this.startFrameInput.value,
+            endFrame: this.endFrameInput.value,
             isNewFile: this.isNewFile,
             editingIndex: this.editingSegmentIndex
         });
-    
+
         if (!this.validateSegmentData()) {
             console.log("Validation failed, cannot save segment");
             return;
         }
-    
+
         try {
-            // null 체크 추가
-            if (!this.userNumInput) {
-                throw new Error('userNumInput element not found');
-            }
-    
+            // 수정: 프레임 값 검증 및 변환 개선
             const startFrame = Math.round(parseInt(this.startFrameInput.value));
             const endFrame = Math.round(parseInt(this.endFrameInput.value));
-            const userNum = parseInt(this.userNumInput.value) || 1;  // 기본값 1 설정
-    
+
+            // 수정: 세그먼트 데이터 구조 개선
             const segment = {
-                segment_id: this.editingSegmentIndex !== null ? 
-                    this.editingSegmentIndex : this.segments.length,
-                action: this.selectedActionType,
+                segment_id: this.editingSegmentIndex !== null ? this.editingSegmentIndex : this.segments.length,
                 start_frame: startFrame,
                 end_frame: endFrame,
-                duration: endFrame - startFrame,
-                user_num: userNum  // user_num 추가
+                duration: ((endFrame - startFrame) / this.FPS).toFixed(6),
+                action: this.selectedActionType,
+                caption: this.captionInput.value.trim(),
+                age: this.isNewFile ? this.defaultValues.age : parseInt(this.getSelectedRadioValue('age')),
+                gender: this.isNewFile ? this.defaultValues.gender : parseInt(this.getSelectedRadioValue('gender')),
+                disability: this.isNewFile ? this.defaultValues.disability : parseInt(this.getSelectedRadioValue('disability')),
+                keyframes: []
             };
-    
+
+            console.log('Saving segment:', segment);
+
             if (this.editingSegmentIndex !== null) {
+                console.log(`Updating existing segment at index ${this.editingSegmentIndex}`);
                 this.segments[this.editingSegmentIndex] = segment;
             } else {
+                console.log('Adding new segment');
                 this.segments.push(segment);
+                // 수정: lastEndTime 업데이트 로직 개선
                 this.lastEndTime = endFrame;
             }
-    
+
+            console.log('Current segments array:', this.segments);
             await this.saveAnnotations();
+            console.log('Annotations saved successfully');
+            
             this.renderSegments();
             this.hideModal();
             fileHandler.hasModifiedContent = true;
-    
+
         } catch (error) {
             console.error("세그먼트 저장 실패:", error);
             console.error("Error details:", {
@@ -468,72 +497,43 @@ hideModal() {
         }
     }
 
-    // timeline.js의 saveAnnotations 메서드
     async saveAnnotations(isComplete = false) {
         try {
-            const video = videoController.video;
-            const currentFile = fileHandler.getCurrentFile();
+            console.log("Current segments before save:", this.segments);
             
-            // 데이터 구조 작성 전 로그
-            console.log("Preparing save data with:", {
-                video,
-                currentFile,
-                videoPath: videoController.currentVideoPath,
-                segments: this.segments
-            });
-    
-            const annotationsData = {
-                meta_data: {
-                    file_name: videoController.currentVideoPath.split('/').pop(),
-                    format: videoController.currentVideoPath.split('.').pop().toLowerCase(),
-                    size: currentFile.size || 0,
-                    width_height: [
-                        video.videoWidth || 0,
-                        video.videoHeight || 0
-                    ],
-                    environment: 0,
+            const annotations = {
+                info: {
+                    filename: videoController.currentVideoPath.split('/').pop(),
+                    format: 'mp4',
+                    size: 0,
+                    width_height: [0, 0],
+                    environment: 1,
+                    device: "KIOSK",
                     frame_rate: this.FPS,
-                    total_frames: Math.round(video.duration * this.FPS),
-                    camera_height: 170,
-                    camera_angle: 15
+                    playtime: videoController.video.duration,
+                    date: new Date().toISOString().split('T')[0]
                 },
+                segments: this.segments.map(segment => ({
+                    ...segment,
+                    // 수정: 프레임 값 변환 정확도 향상
+                    start_frame: Math.round(segment.start_frame),
+                    end_frame: Math.round(segment.end_frame),
+                    action: parseInt(segment.action),
+                    age: parseInt(segment.age),
+                    gender: parseInt(segment.gender),
+                    disability: parseInt(segment.disability)
+                })),
                 additional_info: {
                     InteractionType: "Touchscreen"
-                },
-                annotations: {
-                    space_context: "",
-                    user_num: parseInt(this.userNumInput.value) || 1,
-                    target_objects: [
-                        {
-                            object_id: 0,
-                            age: 1,
-                            gender: 1,
-                            disability: 2
-                        }
-                    ],
-                    segmentation: this.segments.map(segment => ({
-                        segment_id: segment.segment_id,
-                        action_type: segment.action,
-                        start_frame: Math.round(segment.start_frame),
-                        end_frame: Math.round(segment.end_frame),
-                        duration: Math.round(segment.end_frame - segment.start_frame),
-                        keyframe: Math.round((segment.start_frame + segment.end_frame) / 2),
-                        keypoints: [
-                            {
-                                object_id: 0,
-                                keypoints: []
-                            }
-                        ]
-                    }))
                 }
             };
-    
-            // 전송 전 최종 데이터 확인
-            console.log("Final annotations data structure:", JSON.stringify(annotationsData, null, 2));
-            await fileHandler.saveAnnotations(annotationsData, isComplete);
+
+            console.log("Saving annotations:", annotations);
+            await fileHandler.saveAnnotations(annotations, isComplete);
+            console.log("Save completed");
             
         } catch (error) {
-            console.error('Error preparing annotations:', error);
+            console.error('Error saving annotations:', error);
             throw error;
         }
     }
@@ -551,29 +551,31 @@ hideModal() {
     }
 
     validateSegmentData() {
-        console.log('Validation Check:', {
-            actionType: this.selectedActionType,
-            startFrame: this.startFrameInput?.value,
-            endFrame: this.endFrameInput?.value,
-            userNumInput: this.userNumInput,  // 요소 자체 로깅
-            userNumValue: this.userNumInput?.value,  // value 로깅
-            isNewFile: this.isNewFile,
-            defaultValues: this.defaultValues
-        });
-    
         const isValid = 
             this.selectedActionType !== null && 
-            this.startFrameInput?.value !== '' &&
-            this.endFrameInput?.value !== '' &&
-            (this.userNumInput ? 
-                (this.userNumInput.value !== '' &&
-                parseInt(this.userNumInput.value) >= 1 &&
-                parseInt(this.userNumInput.value) <= 10)
-                : true);
-    
-        if (this.saveSegmentBtn) {
-            this.saveSegmentBtn.disabled = !isValid;
-        }
+            this.captionInput.value.trim() !== '' &&
+            this.startFrameInput.value !== '' &&
+            this.endFrameInput.value !== '' &&
+            (this.isNewFile ? 
+                (this.defaultValues.age && this.defaultValues.gender && this.defaultValues.disability) :
+                (this.getSelectedRadioValue('age') && this.getSelectedRadioValue('gender') && this.getSelectedRadioValue('disability'))
+            );
+
+        console.log('Validation Check:', {
+            actionType: this.selectedActionType,
+            caption: this.captionInput.value.trim(),
+            startFrame: this.startFrameInput.value,
+            endFrame: this.endFrameInput.value,
+            isNewFile: this.isNewFile,
+            defaultValues: this.defaultValues,
+            selectedValues: {
+                age: this.getSelectedRadioValue('age'),
+                gender: this.getSelectedRadioValue('gender'),
+                disability: this.getSelectedRadioValue('disability')
+            }
+        });
+        
+        this.saveSegmentBtn.disabled = !isValid;
         return isValid;
     }
 

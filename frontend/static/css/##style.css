@@ -565,31 +565,3 @@ tr.active {
     transform: translateX(-50%) scale(1.2);
     transition: transform 0.2s ease;
 }
-
-/* 세그먼트 모달에서 userNum 추가된 부분 */
-.user-num-input {
-    margin: 1.5rem 0;
-}
-
-.user-num-input label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--tinder-secondary);
-}
-
-.user-num-input input[type="number"] {
-    width: 100%;
-    padding: 0.8rem;
-    border: 1px solid #e0e0e0;
-    border-radius: var(--border-radius);
-    font-size: 1rem;
-}
-
-.user-num-input input[type="number"]:focus {
-    outline: none;
-    border-color: var(--tinder-primary);
-    box-shadow: 0 0 0 2px rgba(254, 60, 114, 0.1);
-}

@@ -155,42 +155,23 @@ class FileHandler {
             if (!file.originalPath) {
                 throw new Error('파일 경로가 없습니다.');
             }
-        
+    
             console.log("Loading annotations for:", file.originalPath);
             const response = await fetch(`/api/annotations/${encodeURIComponent(file.originalPath)}`);
-    
+            console.log("Load annotations response:", response);
+
             if (response.ok) {
                 const data = await response.json();
-                console.log("Loaded annotations data:", data);
-                
-                // 구조 변환이 필요한지 확인하고 처리
-                if (data.segments) {  // 기존 구조
-                    timelineController.segments = data.segments;
-                } else if (data.annotations && data.annotations.segmentation) {  // 새 구조
-                    timelineController.segments = data.annotations.segmentation.map(seg => ({
-                        segment_id: seg.segment_id,
-                        action: seg.action_type,
-                        start_frame: seg.start_frame,
-                        end_frame: seg.end_frame,
-                        duration: seg.duration
-                    }));
-                }
-                
-                timelineController.renderSegments();
+                console.log("Loaded annotations:", data);
+                timelineController.loadAnnotations(data);
                 return data;
             } else {
                 console.log("No existing annotations found");
                 timelineController.segments = [];
-                timelineController.renderSegments();
                 return null;
             }
         } catch (error) {
             console.error('Error loading annotations:', error);
-            console.error("Error details:", {
-                name: error.name,
-                message: error.message,
-                stack: error.stack
-            });
             timelineController.segments = [];
             return null;
         }
@@ -202,12 +183,12 @@ class FileHandler {
             currentIndex: this.currentFileIndex,
             hasModifiedContent: this.hasModifiedContent
         });
-    
+
         if (index === this.currentFileIndex) {
             console.log("Same video already loaded");
             return;
         }
-    
+
         try {
             const file = this.currentFiles[index];
             
@@ -215,7 +196,7 @@ class FileHandler {
             if (!file.accessible) {
                 throw new Error('비디오 파일에 접근할 수 없습니다. 외부 저장장치가 연결되어 있는지 확인해주세요.');
             }
-    
+
             // 저장되지 않은 변경사항 체크
             if (this.hasModifiedContent) {
                 const confirmSave = confirm('수정된 내용이 있습니다. 저장하시겠습니까?');
@@ -223,14 +204,14 @@ class FileHandler {
                     await timelineController.saveAnnotations();
                 }
             }
-    
+
             this.currentFileIndex = index;
             console.log("Loading file:", file);
             this.hasModifiedContent = false;
             
             timelineController.clearSegments();
-    
-            try {
+
+           try {
                 await videoController.loadVideo(file.path);
                 videoController.currentVideoPath = file.originalPath;
                 console.log("Video loaded successfully");
@@ -241,7 +222,7 @@ class FileHandler {
             
             const hasAnnotation = await this.checkAnnotationExists(file.originalPath);
             console.log("Annotation exists:", hasAnnotation);
-    
+
             if (hasAnnotation) {
                 await this.loadAnnotations(file);
                 timelineController.isNewFile = false;
@@ -251,7 +232,6 @@ class FileHandler {
             }
             
             await this.displayFileList();
-    
         } catch (error) {
             console.error("Error loading video:", error);
             console.error("Error details:", {
@@ -268,54 +248,45 @@ class FileHandler {
         if (!currentFile) {
             throw new Error('현재 선택된 파일이 없습니다.');
         }
-    
+
         try {
-            // 받은 데이터 구조 확인
-            console.log("Received annotations structure:", JSON.stringify(annotations, null, 2));
-            console.log("Has meta_data section:", 'meta_data' in annotations);
-            
+            console.log("Saving annotations for:", currentFile);
             const originalPath = currentFile.originalPath || currentFile.path;
-    
+            console.log("Original path:", originalPath);
+
             const formData = new FormData();
             const jsonBlob = new Blob([JSON.stringify(annotations, null, 2)], {
                 type: 'application/json'
             });
-    
-            // Blob 내용 확인
-            const blobText = await jsonBlob.text();
-            console.log("Blob content being sent:", blobText);
             
             formData.append('file', jsonBlob, 'annotations.json');
             formData.append('path', originalPath);
-    
+
+            console.log("Sending annotation data:", annotations);
+
             const saveResponse = await fetch('/api/save-annotation', {
                 method: 'POST',
                 body: formData
             });
-    
+
             if (!saveResponse.ok) {
-                const errorText = await saveResponse.text();
-                console.error('Server response:', errorText);
-                throw new Error('저장 실패: ' + errorText);
+                console.error('Save response not OK:', await saveResponse.text());
+                throw new Error('저장 실패');
             }
-    
+
             const saveResult = await saveResponse.json();
+            console.log("Save result:", saveResult);
+
             if (isComplete) {
                 alert('작성이 완료되었습니다.');
             }
-    
+
             this.hasModifiedContent = false;
             await this.displayFileList();
             return saveResult;
-    
+
         } catch (error) {
             console.error('Save error:', error);
-            console.error("Complete error details:", {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-                data: annotations
-            });
             throw error;
         }
     }

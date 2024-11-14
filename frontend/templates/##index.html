@@ -69,46 +69,49 @@
 
     <!-- 세그먼트 모달 -->
     <div id="segmentModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2 id="modalTitle">구간 정보 입력</h2>
-            
-            <div class="modal-body">
-                <!-- 액션 타입 선택 - 유지 -->
-                <div class="action-types">
-                    <button class="action-type-btn" data-action="0">기타</button>
-                    <button class="action-type-btn" data-action="1">탐색</button>
-                    <button class="action-type-btn" data-action="2">사용</button>
-                    <button class="action-type-btn" data-action="3">종료</button>
-                </div>
-    
-                <!-- 프레임 입력 - 유지 -->
-                <div class="frame-inputs">
-                    <label>
-                        시작 프레임:
-                        <input type="number" id="startFrame" name="startFrame" min="0">
-                    </label>
-                    <label>
-                        종료 프레임:
-                        <input type="number" id="endFrame" name="endFrame" min="0">
-                    </label>
-                </div>
-    
-                <!-- 사용 인원 입력 - 새로 추가 -->
-                <div class="user-num-input">
-                    <label>
-                        사용 인원:
-                        <input type="number" id="userNum" name="userNum" min="1" max="10" value="1">
-                    </label>
-                </div>
-            </div>
-    
-            <div class="modal-footer">
-                <button id="deleteSegment" class="delete-btn">삭제</button>
-                <button id="saveSegment" class="save-btn">저장</button>
-                <button id="cancelSegment" class="cancel-btn">취소</button>
-            </div>
-        </div>
-    </div>
+      <div class="modal-content">
+          <h2 id="modalTitle">구간 정보 입력</h2>
+          <div class="modal-body">
+              <div class="action-types">
+                  <button data-action="0" class="action-type-btn">기타</button>
+                  <button data-action="1" class="action-type-btn">탐색</button>
+                  <button data-action="2" class="action-type-btn">사용</button>
+                  <button data-action="3" class="action-type-btn">종료</button>
+              </div>
+              <div class="frame-inputs">
+                  <label>시작 프레임: <input type="number" id="startFrame"></label>
+                  <label>종료 프레임: <input type="number" id="endFrame"></label>
+              </div>
+              <div class="properties">
+                  <div class="property-group">
+                      <h3>연령</h3>
+                      <label><input type="radio" name="age" value="1"> 유소년</label>
+                      <label><input type="radio" name="age" value="2"> 청장중년</label>
+                      <label><input type="radio" name="age" value="3"> 노년</label>
+                  </div>
+                  <div class="property-group">
+                      <h3>성별</h3>
+                      <label><input type="radio" name="gender" value="1"> 남성</label>
+                      <label><input type="radio" name="gender" value="2"> 여성</label>
+                  </div>
+                  <div class="property-group">
+                      <h3>장애여부</h3>
+                      <label><input type="radio" name="disability" value="1"> 비장애인</label>
+                      <label><input type="radio" name="disability" value="2"> 장애인</label>
+                  </div>
+              </div>
+              <div class="caption-input">
+                  <label for="captionInput">캡션:</label>
+                  <textarea id="captionInput" placeholder="구간에 대한 설명을 입력하세요"></textarea>
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button id="deleteSegment" class="btn delete-btn">삭제</button>
+              <button id="saveSegment" class="btn save-btn" disabled>저장</button>
+              <button id="cancelSegment" class="btn cancel-btn">취소</button>
+          </div>
+      </div>
+  </div>
 
     <!-- JavaScript 파일 로드 -->
     <script src="/static/js/video-controller.js"></script>
