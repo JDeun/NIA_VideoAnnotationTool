@@ -7,7 +7,7 @@
 
 - 비디오 재생 및 제어 (프레임 단위 이동, 구간 지정)
 - 상호작용 유형 레이블링 (기타/접근/사용/종료)
-- 사용자 특성 레이블링 (연령대/성별/장애여부)
+- 사용 인원 입력
 - 타임라인 기반 구간 관리
 - JSON 형식의 어노테이션 데이터 저장/로드
 
@@ -49,76 +49,97 @@ http://localhost:8000
 ```
 
 ## 사용 방법
-
 ### 1. 비디오 로드
-- 경로 로드: 특정 경로의 비디오 파일 로드
-- 폴더 로드: 폴더 내의 모든 비디오 파일 로드
-- 파일 로드: 개별 비디오 파일 선택 로드
+
+경로 로드: 특정 경로의 비디오 파일 로드
+폴더 로드: 폴더 내의 모든 비디오 파일 로드
+파일 로드: 개별 비디오 파일 선택 로드
 
 ### 2. 비디오 제어
-- 재생/일시정지: Space 키 또는 재생 버튼
-- 프레임 이동: 
-  - 이전/다음 프레임: Ctrl + ←/→
-  - 이전/다음 초: ←/→
-- 구간 표시: M 키 또는 구간 표시 버튼
+
+재생/일시정지: Space 키 또는 재생 버튼
+프레임 이동:
+
+이전/다음 프레임: Ctrl + ←/→
+이전/다음 초: ←/→
+
+
+구간 표시: M 키 또는 구간 표시 버튼
 
 ### 3. 구간 레이블링
-1. '구간 표시' 버튼으로 시작 지점 지정
-2. 원하는 종료 지점에서 다시 '구간 표시' 클릭
-3. 팝업 창에서 다음 정보 입력:
-   - 행동 유형 (기타/접근/사용/종료)
-   - 연령대 (유소년/청중장년/노년)
-   - 성별 (남성/여성)
-   - 장애여부 (유/무)
-   - 상황 설명 캡션
-4. '저장' 버튼으로 구간 저장
+
+'구간 표시' 버튼으로 시작 지점 지정
+원하는 종료 지점에서 다시 '구간 표시' 클릭
+팝업 창에서 다음 정보 입력:
+
+행동 유형 (기타/접근/사용/종료)
+사용 인원 (1-10명)
+
+
+'저장' 버튼으로 구간 저장
 
 ### 4. 구간 편집
-- 타임라인의 구간을 클릭하여 정보 수정
-- 드래그하여 구간 이동 또는 크기 조절
-- 삭제 버튼으로 구간 제거
+
+타임라인의 구간을 클릭하여 정보 수정
+드래그하여 구간 이동 또는 크기 조절
+삭제 버튼으로 구간 제거
 
 ### 5. 작업 저장
-- 구간 정보는 자동 저장
-- '작성 완료' 버튼으로 최종 저장
+
+구간 정보는 자동 저장
+'작성 완료' 버튼으로 최종 저장
 
 ## 데이터 형식
-
 ### 입력 데이터
-- 지원 비디오 형식: MP4, AVI, MOV, MKV
-- 권장 프레임레이트: 15fps
+
+지원 비디오 형식: MP4, AVI, MOV, MKV
+권장 프레임레이트: 15fps
 
 ### 출력 데이터 (JSON)
 ```json
 {
-  "info": {
-    "filename": "example.mp4",
-    "format": "mp4",
-    "size": 1234567,
-    "width_height": [1920, 1080],
-    "environment": 1,
-    "device": "KIOSK",
-    "frame_rate": 15,
-    "playtime": 300.0,
-    "date": "2024-01-01"
-  },
-  "segments": [
-    {
-      "segment_id": 0,
-      "start_frame": 150,
-      "end_frame": 300,
-      "duration": 10.0,
-      "action": 1,
-      "caption": "사용자가 키오스크로 접근",
-      "age": 1,
-      "gender": 1,
-      "disability": 2,
-      "keyframes": []
+    "meta_data": {
+        "file_name": "example.mp4",
+        "format": "mp4",
+        "size": 61362738,
+        "width_height": [2304, 1296],
+        "environment": 0,
+        "frame_rate": 15,
+        "total_frames": 4746,
+        "camera_height": 170,
+        "camera_angle": 15
+    },
+    "additional_info": {
+        "InteractionType": "Touchscreen"
+    },
+    "annotations": {
+        "space_context": "",
+        "user_num": 1,
+        "target_objects": [
+            {
+                "object_id": 0,
+                "age": 1,
+                "gender": 1,
+                "disability": 2
+            }
+        ],
+        "segmentation": [
+            {
+                "segment_id": 0,
+                "action_type": 1,
+                "start_frame": 150,
+                "end_frame": 300,
+                "duration": 150,
+                "keyframe": 225,
+                "keypoints": [
+                    {
+                        "object_id": 0,
+                        "keypoints": []
+                    }
+                ]
+            }
+        ]
     }
-  ],
-  "additional_info": {
-    "InteractionType": "Touchscreen"
-  }
 }
 ```
 
@@ -178,5 +199,12 @@ video-annotation-tool/
 - 버그 리포트 및 기능 제안은 Issues 탭을 이용해 주세요.
 
 ## 라이선스
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+### 주요 변경사항:
+1. 주요 기능에서 연령대/성별/장애여부 제거하고 사용 인원 추가
+2. 구간 레이블링 절차 간소화
+3. JSON 구조를 새로운 형식으로 업데이트
+4. 예제 JSON에 모든 필수 필드 포함
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
