@@ -1,31 +1,36 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>비디오 라벨링 플랫폼</title>
     <link rel="stylesheet" href="/static/css/style.css" />
 </head>
+
 <body>
     <div class="container">
         <div class="video-section">
-          <div class="video-container">
-            <video id="videoPlayer" controls></video>
-          </div>
+            <div class="video-container">
+                <video id="videoPlayer" controls></video>
+            </div>
 
             <div class="controls">
-              <button id="prevFrame" class="btn control-btn">◀◀ 이전 프레임</button>
-              <button id="prevSecond" class="btn control-btn">◀ 이전 초</button>
-              <button id="playPause" class="btn control-btn">재생/일시정지</button>
-              <button id="nextSecond" class="btn control-btn">다음 초 ▶</button>
-              <button id="nextFrame" class="btn control-btn">다음 프레임 ▶▶</button>
-              <button id="markPoint" class="btn control-btn highlight-btn">
-                구간 표시
-              </button>
-              <div class="time-display">
-                프레임: <span id="frameCount">0</span> | 시간:
-                <span id="timeCount">0.00</span>s
-              </div>
+                <button id="prevFrame" class="btn control-btn">◀◀ 이전 프레임</button>
+                <button id="prevSecond" class="btn control-btn">◀ 이전 초</button>
+                <button id="playPause" class="btn control-btn">재생/일시정지</button>
+                <button id="nextSecond" class="btn control-btn">다음 초 ▶</button>
+                <button id="nextFrame" class="btn control-btn">다음 프레임 ▶▶</button>
+                <button id="markPoint" class="btn control-btn highlight-btn">구간 표시</button>
+
+                <div class="user-num-container">
+                    <label for="userNum">사용 인원:</label>
+                    <input type="number" id="userNum" name="userNum" min="1" max="10" value="1">
+                </div>
+
+                <div class="time-display">
+                    프레임: <span id="frameCount">0</span> | 시간: <span id="timeCount">0.00</span>s
+                </div>
             </div>
 
             <div class="timeline-container">
@@ -71,7 +76,7 @@
     <div id="segmentModal" class="modal" style="display: none;">
         <div class="modal-content">
             <h2 id="modalTitle">구간 정보 입력</h2>
-            
+
             <div class="modal-body">
                 <!-- 액션 타입 선택 - 유지 -->
                 <div class="action-types">
@@ -80,7 +85,7 @@
                     <button class="action-type-btn" data-action="2">사용</button>
                     <button class="action-type-btn" data-action="3">종료</button>
                 </div>
-    
+
                 <!-- 프레임 입력 - 유지 -->
                 <div class="frame-inputs">
                     <label>
@@ -92,27 +97,19 @@
                         <input type="number" id="endFrame" name="endFrame" min="0">
                     </label>
                 </div>
-    
-                <!-- 사용 인원 입력 - 새로 추가 -->
-                <div class="user-num-input">
-                    <label>
-                        사용 인원:
-                        <input type="number" id="userNum" name="userNum" min="1" max="10" value="1">
-                    </label>
+
+                <div class="modal-footer">
+                    <button id="deleteSegment" class="delete-btn">삭제</button>
+                    <button id="saveSegment" class="save-btn">저장</button>
+                    <button id="cancelSegment" class="cancel-btn">취소</button>
                 </div>
             </div>
-    
-            <div class="modal-footer">
-                <button id="deleteSegment" class="delete-btn">삭제</button>
-                <button id="saveSegment" class="save-btn">저장</button>
-                <button id="cancelSegment" class="cancel-btn">취소</button>
-            </div>
         </div>
-    </div>
 
-    <!-- JavaScript 파일 로드 -->
-    <script src="/static/js/video-controller.js"></script>
-    <script src="/static/js/timeline.js"></script>
-    <script src="/static/js/file-handler.js"></script>
+        <!-- JavaScript 파일 로드 -->
+        <script src="/static/js/video-controller.js"></script>
+        <script src="/static/js/timeline.js"></script>
+        <script src="/static/js/file-handler.js"></script>
 </body>
+
 </html>
