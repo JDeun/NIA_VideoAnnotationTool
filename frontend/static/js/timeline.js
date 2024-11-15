@@ -370,9 +370,9 @@ class TimelineController {
       this.selectedActionType = segmentData.action;
 
       // user_num 값 설정 부분에 null 체크 추가
-      if (this.userNumInput) {
-        this.userNumInput.value = this.defaultValues.user_num;
-      }
+      //if (this.userNumInput) {
+      //  this.userNumInput.value = this.defaultValues.user_num;
+      //}
 
       this.actionButtons.forEach((btn) => {
         btn.classList.toggle(
@@ -386,35 +386,31 @@ class TimelineController {
       this.selectedActionType = null;
 
       // user_num 값 설정 부분에 null 체크 추가
-      if (this.userNumInput) {
-        this.userNumInput.value = this.defaultValues.user_num;
-      }
+      //if (this.userNumInput) {
+      //  this.userNumInput.value = this.defaultValues.user_num;
+      //}
     }
 
     this.validateSegmentData();
   }
 
+  // 모달 창 여닫을 시 userNum 리셋되는 부분 수정
   hideModal() {
     this.modal.style.display = "none";
     this.currentSegment = null;
     this.selectedActionType = null;
     this.editingSegmentIndex = null;
-
-    // userNumInput 값 초기화 부분에 null 체크 추가
-    if (this.userNumInput) {
-      this.userNumInput.value = "1"; // 기본값으로 설정
-    }
-
+    
     videoController.enableControls();
 
     if (this.temporaryMarker) {
-      this.temporaryMarker.remove();
-      this.temporaryMarker = null;
+        this.temporaryMarker.remove();
+        this.temporaryMarker = null;
     }
 
     this.markPointBtn.textContent = "구간 표시";
     this.markPointBtn.classList.remove("active");
-  }
+}
 
   async handleSegmentSave() {
     console.log("Starting segment save process");
