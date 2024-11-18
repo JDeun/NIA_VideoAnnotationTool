@@ -23,8 +23,8 @@ def check_file_access(path: Path) -> bool:
     except Exception:
         return False
 
+# file_handler.py의 get_video_files 함수 부분
 async def get_video_files(path: Path) -> List[Dict]:
-    """로컬 경로에서 비디오 파일을 검색합니다."""
     try:
         normalized_path = normalize_path(path)
         if not check_file_access(normalized_path):
@@ -35,16 +35,17 @@ async def get_video_files(path: Path) -> List[Dict]:
         # 경로가 파일인 경우
         if normalized_path.is_file():
             if await validate_video_file(normalized_path):
+                abs_path = str(normalized_path.absolute())  # 절대 경로 사용
                 video_files.append({
                     "name": normalized_path.name,
-                    "path": str(normalized_path).replace("\\", "/"),
+                    "path": abs_path.replace("\\", "/"),
                     "size": normalized_path.stat().st_size,
                     "type": "local",
-                    # 추가 정보
-                    "originalPath": str(normalized_path).replace("\\", "/"),
+                    "originalPath": abs_path.replace("\\", "/"),  # 절대 경로 사용
                     "drive": normalized_path.drive,
                     "accessible": True
                 })
+                
         # 경로가 디렉토리인 경우
         elif normalized_path.is_dir():
             for file_path in normalized_path.rglob("*"):
@@ -55,8 +56,8 @@ async def get_video_files(path: Path) -> List[Dict]:
                             "path": str(file_path).replace("\\", "/"),
                             "size": file_path.stat().st_size,
                             "type": "local",
-                            # 추가 정보
-                            "originalPath": str(file_path).replace("\\", "/"),
+                            # originalPath를 절대 경로로 수정
+                            "originalPath": str(file_path.resolve()).replace("\\", "/"),
                             "drive": file_path.drive,
                             "accessible": True
                         })

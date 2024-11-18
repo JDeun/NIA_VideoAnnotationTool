@@ -264,97 +264,72 @@ class TimelineController {
     videoController.pause();
 
     if (!video.src) {
-      console.warn("No video loaded - cannot mark timeline point");
-      alert("먼저 비디오를 로드해주세요.");
-      return;
+        console.warn("No video loaded - cannot mark timeline point");
+        alert("먼저 비디오를 로드해주세요.");
+        return;
     }
 
     const currentTime = video.currentTime;
-    // 수정: 프레임 계산 정확도 향상
     const currentFrame = Math.round(currentTime * this.FPS);
+    const totalFrames = Math.round(video.duration * this.FPS);
 
     console.log("Marking timeline point:", {
-      currentTime,
-      currentFrame,
-      hasCurrentSegment: !!this.currentSegment,
-      lastEndTime: this.lastEndTime,
-      videoDuration: video.duration,
-      totalFrames: Math.round(video.duration * this.FPS),
+        currentTime,
+        currentFrame,
+        totalFrames,
+        hasCurrentSegment: !!this.currentSegment,
+        lastEndTime: this.lastEndTime,
+        isMarkingSegment: this.isMarkingSegment
     });
 
-    if (!this.currentSegment) {
-      // 수정: 시작 프레임 결정 로직 개선
-      let startFrame =
-        this.lastEndTime !== null && this.lastEndTime > currentFrame
-          ? this.lastEndTime
-          : currentFrame;
+    if (!this.isMarkingSegment) {
+        // 시작 프레임 결정
+        let startFrame = this.lastEndTime !== null && this.lastEndTime > currentFrame 
+            ? this.lastEndTime 
+            : currentFrame;
 
-      console.log("Creating new segment:", {
-        startFrame,
-        currentFrame,
-        timeInSeconds: startFrame / this.FPS,
-      });
-
-      // 수정: 시작 지점 유효성 검사 추가
-      if (startFrame >= 0 && startFrame <= video.duration * this.FPS) {
-        this.currentSegment = { startFrame };
-        this.showTemporaryMarker(startFrame / this.FPS);
-        this.markPointBtn.textContent = "구간 종료";
-        this.markPointBtn.classList.add("active");
-        this.isMarkingSegment = true;
-      } else {
-        console.error("Invalid start frame:", startFrame);
-        alert("유효하지 않은 시작 지점입니다.");
-        return;
-      }
+        // 시작 지점 유효성 검사 추가
+        if (startFrame >= 0 && startFrame <= totalFrames) {  // video.duration * this.FPS 대신 totalFrames 사용
+            this.currentSegment = { startFrame };
+            this.showTemporaryMarker(startFrame / this.FPS);
+            this.markPointBtn.textContent = "구간 종료";
+            this.markPointBtn.classList.add("active");
+            this.isMarkingSegment = true;
+        } else {
+            console.error("Invalid start frame:", startFrame);
+            alert("유효하지 않은 시작 지점입니다.");
+            return;
+        }
     } else {
-      if (currentFrame <= this.currentSegment.startFrame) {
-        console.warn("End point before start point:", {
-          currentFrame,
-          startFrame: this.currentSegment.startFrame,
+        if (currentFrame <= this.currentSegment.startFrame) {
+            console.warn("End point before start point:", {
+                currentFrame,
+                startFrame: this.currentSegment.startFrame
+            });
+            alert("종료 시점은 시작 시점보다 뒤여야 합니다.");
+            return;
+        }
+
+        // 최소 구간 길이 검사 추가
+        if (currentFrame - this.currentSegment.startFrame < this.MINIMUM_SEGMENT_FRAMES) {
+            alert("구간이 너무 짧습니다. 더 길게 입력하세요.");
+            return;
+        }
+
+        console.log("Ending segment", {
+            startFrame: this.currentSegment.startFrame,
+            endFrame: currentFrame
         });
-        alert("종료 시점은 시작 시점보다 뒤여야 합니다.");
-        return;
-      }
 
-      // 수정: 최소 구간 길이 검사 추가
-      if (
-        currentFrame - this.currentSegment.startFrame <
-        this.MINIMUM_SEGMENT_FRAMES
-      ) {
-        alert("구간이 너무 짧습니다. 더 길게 입력하세요.");
-        return;
-      }
-
-      console.log("Ending segment", {
-        startFrame: this.currentSegment.startFrame,
-        endFrame: currentFrame,
-      });
-
-      // 시작 프레임 유효성 검사 강화
-      const totalFrames = Math.round(video.duration * this.FPS);
-      if (startFrame < 0) {
-        startFrame = 0;
-      } else if (startFrame >= totalFrames) {
-        startFrame = totalFrames - 1;
-      }
-
-      console.log("Creating new segment:", {
-        startFrame,
-        currentFrame,
-        timeInSeconds: startFrame / this.FPS,
-        totalFrames: totalFrames,
-      });
-
-      this.showModal({
-        ...this.currentSegment,
-        endFrame: currentFrame,
-      });
-      this.markPointBtn.textContent = "구간 표시";
-      this.markPointBtn.classList.remove("active");
-      this.isMarkingSegment = false;
+        this.showModal({
+            startFrame: this.currentSegment.startFrame,
+            endFrame: currentFrame,
+        });
+        this.markPointBtn.textContent = "구간 표시";
+        this.markPointBtn.classList.remove("active");
+        this.isMarkingSegment = false;
     }
-  }
+}
 
   showModal(segment, isEdit = false) {
     this.modal.style.display = "block";
@@ -767,6 +742,29 @@ class TimelineController {
       });
     }
   }
+
+  resetState() {
+    console.log("Resetting TimelineController state");
+    this.segments = [];
+    this.currentSegment = null;
+    this.lastEndTime = 0;
+    this.isMarkingSegment = false;
+    
+    // 임시 마커 제거
+    if (this.temporaryMarker) {
+        this.temporaryMarker.remove();
+        this.temporaryMarker = null;
+    }
+
+    // 구간 표시 버튼 초기화
+    if (this.markPointBtn) {
+        this.markPointBtn.textContent = "구간 표시";
+        this.markPointBtn.classList.remove("active");
+    }
+
+    // 타임라인 마커 초기화
+    this.clearSegments();
+}
 
   // 수정: 임시 마커 표시 기능 개선
   showTemporaryMarker(time) {

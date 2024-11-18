@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import unquote
 import shutil
 import cv2
+import os
 from datetime import datetime
 import logging
 
@@ -17,79 +18,93 @@ router = APIRouter(prefix="/api", tags=["annotations"])
 
 @router.get("/check-annotation")
 async def check_annotation(path: str):
-   """어노테이션 파일 존재 여부 확인"""
-   try:
-       logger.info(f"Checking annotation for path: {path}")
-       video_path = unquote(path)
-       json_path = Path(video_path).with_suffix('.json')
+    """어노테이션 파일 존재 여부 확인"""
+    try:
+        logger.info(f"Checking annotation for path: {path}")
+        video_path = unquote(path)
+        json_path = Path(video_path).with_suffix('.json') 
 
-       exists = json_path.exists()
-       logger.info(f"Annotation exists: {exists} at path: {json_path}")
-       
-       return JSONResponse(
-           content={"exists": json_path.exists()},
-           status_code=200
-       )
-   except Exception as e:
-       logger.error(f"Error checking annotation: {str(e)}")
-       return JSONResponse(
-           content={"exists": False},
-           status_code=200
-       )
+        exists = json_path.exists()
+        logger.info(f"Annotation exists: {exists} at path: {json_path}")
+        
+        return JSONResponse(
+            content={"exists": json_path.exists()},
+            status_code=200
+        )
+    except Exception as e:
+        logger.error(f"Error checking annotation: {str(e)}")
+        return JSONResponse(
+            content={"exists": False},
+            status_code=200
+        )
 
 @router.post("/save-annotation")
 async def save_annotation(file: UploadFile = File(...), path: str = Form(...)):
     """어노테이션 저장"""
     try:
-        print(f"Saving annotation for path: {path}")  # 디버깅용 로그
+        logger.info(f"Saving annotation for original path: {path}")
 
         if path.startswith('blob:'):
             logger.error("Invalid file path: blob URL detected")
-            raise HTTPException(status_code=400, detail="Invalid file path")
+            raise HTTPException(status_code=400, detail="Invalid file path: blob URL not allowed")
 
-        # 파일 경로 처리
-        video_path = unquote(path)
-        json_path = Path(video_path).with_suffix('.json')
-        
-        logger.info(f"JSON path: {json_path}")  # 디버깅용 로그
-        
-        # 디렉토리가 없으면 생성
-        json_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # 새로운 데이터 로드
-        content = await file.read()
         try:
-            raw_data = content.decode('utf-8')  # 디버깅용 원본 데이터 출력
-            logger.info(f"Raw data received: {raw_data}")
+            # url 디코딩
+            video_path = unquote(path)
+            logger.info(f"Decoded video path: {video_path}")
             
-            new_data = json.loads(content)
-            logger.info(f"Parsed data: {json.dumps(new_data, indent=2)}")  # 파싱된 데이터 출력
-            logger.info(f"Data keys: {list(new_data.keys())}")  # 최상위 키 목록 출력
+            # get_annotations와 동일한 방식으로 경로 처리
+            video_file = Path(video_path)
+            json_path = video_file.with_suffix('.json')
+            logger.info(f"Target JSON path: {json_path}")
+
+            # 비디오 파일의 디렉토리 존재 확인
+            if not video_file.parent.exists():
+                error_msg = f"Directory not found: {video_file.parent}"
+                logger.error(error_msg)
+                raise HTTPException(status_code=404, detail=error_msg)
+
+            # 디렉토리 쓰기 권한 확인
+            if not os.access(str(video_file.parent), os.W_OK):
+                error_msg = f"No write permission: {video_file.parent}"
+                logger.error(error_msg)
+                raise HTTPException(status_code=403, detail=error_msg)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Path validation error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Path validation error: {str(e)}")
+
+        # 파일 내용 처리
+        try:
+            content = await file.read()
+            new_data = json.loads(content.decode('utf-8'))
+            logger.info(f"Parsed JSON data with keys: {list(new_data.keys())}")
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
             raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
+        except Exception as e:
+            logger.error(f"Content processing error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Content processing error: {str(e)}")
 
-        save_data = new_data  # 기존의 병합 로직 제거
-
-        # 저장 전 데이터 검증
+        # 데이터 구조 검증
         try:
-            logger.info("Validating data structure")
-            logger.info(f"Data to validate: {json.dumps(save_data, indent=2)}")
-            validate_data_structure(save_data)
-            logger.info("Data validation passed")
+            validate_data_structure(new_data)
+            logger.info("Data structure validation passed")
         except ValueError as e:
-            logger.error(f"Validation error: {str(e)}")
+            logger.error(f"Data validation error: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
         # 파일 저장
         try:
             with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(save_data, f, ensure_ascii=False, indent=2)
-                logger.info(f"File saved successfully at: {json_path}")
+                json.dump(new_data, f, ensure_ascii=False, indent=2)
+            logger.info(f"Successfully saved to: {json_path}")
         except Exception as e:
-            logger.error(f"Error saving file: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
-        
+            logger.error(f"File save error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"File save error: {str(e)}")
+
         return JSONResponse(
             content={
                 "status": "success",
@@ -98,9 +113,12 @@ async def save_annotation(file: UploadFile = File(...), path: str = Form(...)):
             },
             status_code=200
         )
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 def validate_data_structure(data):
     """데이터 구조 검증"""

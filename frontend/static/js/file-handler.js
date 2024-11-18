@@ -132,7 +132,7 @@ class FileHandler {
                     path: URL.createObjectURL(file),
                     size: file.size,
                     type: 'local',
-                    originalPath: file.path || file.webkitRelativePath || file.name,
+                    originalPath: file.path || file.webkitRelativePath || file.absolutePath || file.fullPath || file.name,
                     file: file,
                     accessible: true
                 };
@@ -158,10 +158,20 @@ class FileHandler {
         
             console.log("Loading annotations for:", file.originalPath);
             const response = await fetch(`/api/annotations/${encodeURIComponent(file.originalPath)}`);
+            console.log("Load annotations response:", response);
     
             if (response.ok) {
                 const data = await response.json();
                 console.log("Loaded annotations data:", data);
+
+                // userNum 값을 설정
+                if (data.annotations && data.annotations.user_num) {
+                    console.log("Setting user_num from loaded data:", data.annotations.user_num);
+                    timelineController.userNumInput.value = data.annotations.user_num;
+                } else if (data.info) {  // 기존 구조에서도 user_num이 있을 수 있는 경우 처리
+                    console.log("Setting default user_num: 1");
+                    timelineController.userNumInput.value = 1;
+                }
                 
                 // 구조 변환이 필요한지 확인하고 처리
                 if (data.segments) {  // 기존 구조
@@ -228,7 +238,8 @@ class FileHandler {
             console.log("Loading file:", file);
             this.hasModifiedContent = false;
             
-            timelineController.clearSegments();
+            // TimelineController 초기화 추가
+            timelineController.resetState();  // 새로운 메서드 호출
     
             try {
                 await videoController.loadVideo(file.path);
@@ -275,6 +286,13 @@ class FileHandler {
             console.log("Has meta_data section:", 'meta_data' in annotations);
             
             const originalPath = currentFile.originalPath || currentFile.path;
+            console.log("Using path for save:", originalPath);  // 경로 로깅 추가
+
+            // 경로 검증 추가
+            if (!originalPath || originalPath.startsWith('blob:')) {
+                console.error('Invalid file path:', originalPath);
+                throw new Error('유효하지 않은 파일 경로입니다.');
+            }
     
             const formData = new FormData();
             const jsonBlob = new Blob([JSON.stringify(annotations, null, 2)], {
